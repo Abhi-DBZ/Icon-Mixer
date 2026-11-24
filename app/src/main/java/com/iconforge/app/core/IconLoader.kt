@@ -90,9 +90,15 @@ class IconLoader(private val context: Context, private val packs: IconPacks, pri
         }
     }
 
-    /** Full-quality bitmap for export (not cached). */
-    fun renderForExport(src: IconSrc, sizePx: Int, shape: IconShape = IconShape.DEFAULT): Bitmap? =
-        runCatching { render(src, sizePx, shape) }.getOrNull()
+    /** Light/dark mode forced for the render running on this thread (null = phone's current mode). */
+    private val forcedNight = ThreadLocal<Boolean?>()
+
+    /** Full-quality bitmap for export (not cached). [night]: draw pack icons in light/dark mode. */
+    fun renderForExport(src: IconSrc, sizePx: Int, shape: IconShape = IconShape.DEFAULT, night: Boolean? = null): Bitmap? {
+        val prev = forcedNight.get()
+        forcedNight.set(night)
+        return try { runCatching { render(src, sizePx, shape) }.getOrNull() } finally { forcedNight.set(prev) }
+    }
 
     private fun render(src: IconSrc, sizePx: Int, shape: IconShape): Bitmap? = when (src) {
         is IconSrc.FileImage -> BitmapFactory.decodeFile(src.path)?.let {
@@ -115,7 +121,7 @@ class IconLoader(private val context: Context, private val packs: IconPacks, pri
     private val looks = java.util.concurrent.ConcurrentHashMap<String, java.util.Optional<PackLook>>()
 
     /** Two-tone look of a pack (plate + glyph colours, shape), learned from its icons; null if it has none. */
-    fun packLook(pack: LoadedPack): PackLook? = looks.getOrPut("${pack.packageName}@${pack.versionCode}") {
+    fun packLook(pack: LoadedPack): PackLook? = looks.getOrPut("${pack.packageName}@${pack.versionCode}#${forcedNight.get()}") {
         val s = 64
         val samples = pack.byComponent.values.distinct().take(40).mapNotNull { name ->
             drawable(IconSrc.Pack(pack.packageName, name))?.let { d ->
@@ -272,7 +278,7 @@ class IconLoader(private val context: Context, private val packs: IconPacks, pri
             runCatching { pm.getApplicationIcon(src.packageName) }.getOrNull()
         }
         is IconSrc.Pack -> {
-            val res = packs.resourcesFor(src.pack)
+            val res = packs.resourcesFor(src.pack, forcedNight.get())
             val id = packs.cached(src.pack)?.drawableId(src.drawable)
                 ?: res?.getIdentifier(src.drawable, "drawable", src.pack)?.takeIf { it != 0 }
                 ?: res?.getIdentifier(src.drawable, "mipmap", src.pack)

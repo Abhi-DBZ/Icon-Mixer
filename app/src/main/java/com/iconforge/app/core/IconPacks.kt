@@ -112,6 +112,22 @@ class IconPacks(private val context: Context) {
         return found.values.sortedBy { it.label.lowercase() }
     }
 
+    private val modeRes = ConcurrentHashMap<String, Resources>()
+
+    /** Pack resources in light ([night] = false) or dark (true) mode; null = the phone's current mode. */
+    fun resourcesFor(pkg: String, night: Boolean?): Resources? {
+        if (night == null) return resourcesFor(pkg)
+        val key = "$pkg#$night"
+        modeRes[key]?.let { return it }
+        return runCatching {
+            val conf = android.content.res.Configuration(context.resources.configuration)
+            val mask = android.content.res.Configuration.UI_MODE_NIGHT_MASK
+            conf.uiMode = (conf.uiMode and mask.inv()) or
+                (if (night) android.content.res.Configuration.UI_MODE_NIGHT_YES else android.content.res.Configuration.UI_MODE_NIGHT_NO)
+            context.createPackageContext(pkg, 0).createConfigurationContext(conf).resources
+        }.getOrNull()?.also { modeRes[key] = it }
+    }
+
     fun resourcesFor(pkg: String): Resources? = resources[pkg] ?: try {
         pm.getResourcesForApplication(pkg).also { resources[pkg] = it }
     } catch (_: Exception) { null }
@@ -124,7 +140,7 @@ class IconPacks(private val context: Context) {
                 cache.remove(pkg); resources.remove(pkg); return@withLock null
             }
             cache[pkg]?.takeIf { it.versionCode == version }?.let { return@withLock it }
-            resources.remove(pkg)
+            resources.remove(pkg); modeRes.remove("$pkg#true"); modeRes.remove("$pkg#false")
             parse(pkg, version)?.also { cache[pkg] = it }
         }
     }

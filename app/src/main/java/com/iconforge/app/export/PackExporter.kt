@@ -161,9 +161,12 @@ class PackExporter(
 
         fun addIcon(src: IconSrc, base: String): String? {
             bySource[src.key]?.let { return it }
-            val bmp = loader.renderForExport(src, size, shape) ?: return null
+            // Draw in light and dark mode; keep the dark picture only when it differs
+            // (packs with day/night icons), so the launcher can switch with the phone's theme.
+            val bmp = loader.renderForExport(src, size, shape, night = false) ?: return null
+            val dark = loader.renderForExport(src, size, shape, night = true)?.takeIf { !it.sameAs(bmp) }
             val name = unique(base)
-            icons += PackIcon(name, bmp.png())
+            icons += PackIcon(name, bmp.png(), dark?.png())
             bySource[src.key] = name
             return name
         }

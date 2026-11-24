@@ -98,11 +98,13 @@ class OutTable(private val packageName: String) {
     }
 
     companion object {
-        /** ResTable_config: default (any) and nodpi. */
-        fun config(density: Int = 0): ByteArray =
-            ByteBuffer.allocate(64).order(ByteOrder.LITTLE_ENDIAN).putInt(0, 64).putShort(14, density.toShort()).array()
+        /** ResTable_config: default (any), nodpi, and nodpi + night (dark theme). uiMode is byte 29. */
+        fun config(density: Int = 0, night: Boolean = false): ByteArray =
+            ByteBuffer.allocate(64).order(ByteOrder.LITTLE_ENDIAN).putInt(0, 64).putShort(14, density.toShort())
+                .put(29, if (night) 0x20.toByte() else 0).array()
         val DEFAULT_CONFIG: ByteArray get() = config()
         val NODPI_CONFIG: ByteArray get() = config(0xFFFF)
+        val NODPI_NIGHT_CONFIG: ByteArray get() = config(0xFFFF, night = true)
     }
 }
 

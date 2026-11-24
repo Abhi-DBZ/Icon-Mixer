@@ -40,6 +40,7 @@ apps" when Android asks). Android 8.0 or newer.
 - **Live Material You colours (experimental)**: icons from packs like Pix Material You keep
   following your wallpaper in the exported pack.
 - **Calendar icons** that show today's date, when the source pack has them.
+- **Light / dark icons**: packs with separate dark-mode icons keep both; your launcher switches with the phone's theme.
 - **Themes**: save, rename, duplicate, delete; ZIP backup and import (also imports exported APKs).
 - **New apps**: when you install an app it's themed automatically from your packs if
   possible; otherwise you get a notification to pick an icon. The installed pack then updates

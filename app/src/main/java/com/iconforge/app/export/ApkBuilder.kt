@@ -10,7 +10,8 @@ import java.util.zip.CRC32
 import java.util.zip.Deflater
 
 /** One bitmap in the generated pack. [resName] must be a valid resource name ([a-z][a-z0-9_]*). */
-class PackIcon(val resName: String, val png: ByteArray)
+/** [pngNight]: the dark-theme picture when it differs; Android picks it when the phone is in dark mode. */
+class PackIcon(val resName: String, val png: ByteArray, val pngNight: ByteArray? = null)
 
 /** "ComponentInfo{pkg/cls}" → icon. */
 data class PackMapping(val packageName: String, val activityName: String, val resName: String)
@@ -65,6 +66,7 @@ object ApkBuilder {
     const val MIN_SDK = 26
     private const val TARGET_SDK = 34
     private const val ICON_DIR = "res/drawable-nodpi-v4/"
+    private const val ICON_DIR_NIGHT = "res/drawable-night-nodpi-v8/"
 
     fun appfilterText(spec: PackSpec): String = buildString {
         append("<?xml version=\"1.0\" encoding=\"utf-8\"?>\n<resources>\n")
@@ -156,7 +158,12 @@ object ApkBuilder {
         // Type order fixes ids: drawable = 0x7f01xxxx with our bitmaps first (the manifest icon id relies on it).
         val table = OutTable(spec.packageName)
         val drawableType = table.type("drawable")
-        spec.icons.forEach { drawableType.add(it.resName, listOf(OutTable.NODPI_CONFIG to OutVal.Str(ICON_DIR + it.resName + ".png"))) }
+        spec.icons.forEach {
+            drawableType.add(it.resName, listOfNotNull(
+                OutTable.NODPI_CONFIG to OutVal.Str(ICON_DIR + it.resName + ".png"),
+                it.pngNight?.let { _ -> OutTable.NODPI_NIGHT_CONFIG to OutVal.Str(ICON_DIR_NIGHT + it.resName + ".png") },
+            ))
+        }
         val xmlType = table.type("xml")
         xmlType.add("appfilter", listOf(OutTable.DEFAULT_CONFIG to OutVal.Str("res/xml/appfilter.xml")))
         xmlType.add("drawable", listOf(OutTable.DEFAULT_CONFIG to OutVal.Str("res/xml/drawable.xml")))
@@ -174,6 +181,7 @@ object ApkBuilder {
             zip.add("assets/drawable.xml", drawableXmlText(spec).toByteArray(), compress = true)
             spec.extraFiles.forEach { (path, data) -> zip.add(path, data, compress = true) }
             spec.icons.forEach { zip.add(ICON_DIR + it.resName + ".png", it.png, compress = false) }
+            spec.icons.forEach { i -> i.pngNight?.let { zip.add(ICON_DIR_NIGHT + i.resName + ".png", it, compress = false) } }
             liveFiles.forEach { (path, data) -> zip.add(path, data, compress = path.endsWith(".xml")) }
             zip.finish()
         }

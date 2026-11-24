@@ -50,7 +50,7 @@ class ApkBuilderTest {
             versionName = "1.3",
             icons = listOf(
                 PackIcon("whatsapp", png(0xFF25D366.toInt())),
-                PackIcon("camera", png(0xFF3366FF.toInt())),
+                PackIcon("camera", png(0xFF3366FF.toInt()), pngNight = png(0xFF0A1A44.toInt())),
                 PackIcon("app_com_example_bank", png(0xFFFF8800.toInt())),
             ),
             mappings = listOf(
