@@ -115,9 +115,10 @@ fun EditorScreen(main: MainViewModel, nav: NavHostController, themeId: Long, ini
                 title = {
                     if (selecting) Text("${sel.size} selected")
                     else Column {
-                        Text(theme?.name ?: "", maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        Text(theme?.name ?: "", maxLines = 1, overflow = TextOverflow.Ellipsis,
+                            style = MaterialTheme.typography.titleLarge)
                         theme?.let {
-                            Text("${it.themedApps}/${it.totalApps} themed · ${(it.coverage * 100).toInt()}%",
+                            Text("${it.themedApps}/${it.totalApps} · ${(it.coverage * 100).toInt()}%", maxLines = 1,
                                 style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
                         }
                     }
@@ -131,10 +132,11 @@ fun EditorScreen(main: MainViewModel, nav: NavHostController, themeId: Long, ini
                                 if (listView) "Grid view" else "List view")
                         }
                         IconButton(onClick = main::undo, enabled = undo != null) { Icon(Icons.AutoMirrored.Outlined.Undo, "Undo ${undo ?: ""}") }
-                        IconButton(onClick = { nav.navigate(Routes.export(themeId)) }) { Icon(Icons.Outlined.FileDownload, "Export") }
                         Box {
                             IconButton(onClick = { menu = true }) { Icon(Icons.Outlined.MoreVert, "More") }
                             DropdownMenu(menu, { menu = false }) {
+                                DropdownMenuItem(text = { Text("Export…") }, leadingIcon = { Icon(Icons.Outlined.FileDownload, null) },
+                                    onClick = { menu = false; nav.navigate(Routes.export(themeId)) })
                                 DropdownMenuItem(text = { Text("Auto-fill missing…") }, onClick = { menu = false; autoFill = true })
                                 if ((counts[EditorViewModel.Filter.REVIEW] ?: 0) > 0) DropdownMenuItem(
                                     text = { Text("Keep all auto-filled") }, onClick = { menu = false; main.acceptAll(themeId) })
@@ -173,7 +175,7 @@ fun EditorScreen(main: MainViewModel, nav: NavHostController, themeId: Long, ini
     ) { pad ->
       CompositionLocalProvider(LocalIconShape provides shape) {
         Column(Modifier.fillMaxSize().padding(pad)) {
-            SearchField(query, { vm.query.value = it }, "Search apps", Modifier.padding(horizontal = 16.dp))
+            SearchField(query, { vm.query.value = it }, "Search apps", Modifier.padding(horizontal = 16.dp, vertical = 4.dp))
             Row(Modifier.horizontalScroll(rememberScrollState()).padding(horizontal = 16.dp, vertical = 6.dp),
                 horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 EditorViewModel.Filter.entries.forEach { f ->
@@ -184,7 +186,7 @@ fun EditorScreen(main: MainViewModel, nav: NavHostController, themeId: Long, ini
             }
             if (filter == EditorViewModel.Filter.REVIEW && rows.isNotEmpty()) {
                 Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp), verticalAlignment = Alignment.CenterVertically) {
-                    Text("Auto-filled icons. Tap one to change it, or keep or remove them all.",
+                    Text("Tap an icon to change it", maxLines = 1, overflow = TextOverflow.Ellipsis,
                         style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
                         modifier = Modifier.weight(1f))
                     TextButton(onClick = { main.removeAutoFilled(themeId) }) { Text("Remove all") }

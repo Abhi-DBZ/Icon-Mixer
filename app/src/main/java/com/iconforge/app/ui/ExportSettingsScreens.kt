@@ -322,7 +322,7 @@ fun SettingsScreen(vm: MainViewModel) {
             HorizontalDivider(Modifier.padding(vertical = 8.dp))
             SectionTitle("About")
             ListItem(
-                headlineContent = { Text("Icon Mixer 1.7.1") },
+                headlineContent = { Text("Icon Mixer 1.7.2") },
                 supportingContent = {
                     Text("Mixes icons from the packs you own into one complete pack. Exported packs are signed with a key kept on this phone; " +
                         "if you reinstall Icon Mixer, uninstall old exported packs before installing new ones.")

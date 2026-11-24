@@ -164,7 +164,7 @@ fun PickerScreen(main: MainViewModel, nav: NavHostController, themeId: Long, key
             }
             SearchField(
                 query, { vm.query.value = it }, "Search icons in $packLabel",
-                Modifier.padding(horizontal = 16.dp, vertical = 4.dp).onFocusChanged { searchFocused = it.isFocused },
+                Modifier.padding(horizontal = 16.dp, vertical = 4.dp).onFocusChanged { searchFocused = it.hasFocus },
             )
 
             LazyVerticalGrid(

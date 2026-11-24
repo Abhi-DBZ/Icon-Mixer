@@ -3,6 +3,10 @@ package com.iconforge.app.ui
 import android.content.Intent
 import android.net.Uri
 import androidx.compose.foundation.clickable
+import androidx.compose.ui.draw.clip
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.background
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -127,18 +131,38 @@ fun AppsScreen(vm: MainViewModel, nav: NavHostController) {
 
 @Composable
 fun SearchField(value: String, onChange: (String) -> Unit, hint: String, modifier: Modifier = Modifier) {
+    // Slim pill (44dp) instead of a 56dp outlined field: leaves more room for the list.
     val focus = LocalFocusManager.current
-    OutlinedTextField(
-        value = value, onValueChange = onChange, singleLine = true,
-        // The keyboard's search key closes the keyboard so all results are visible.
-        keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
-        keyboardActions = KeyboardActions(onSearch = { focus.clearFocus() }),
-        placeholder = { Text(hint) },
-        leadingIcon = { Icon(Icons.Outlined.Search, null) },
-        trailingIcon = { if (value.isNotEmpty()) IconButton(onClick = { onChange("") }) { Icon(Icons.Outlined.Close, "Clear") } },
-        shape = MaterialTheme.shapes.extraLarge,
-        modifier = modifier.fillMaxWidth(),
-    )
+    val cs = MaterialTheme.colorScheme
+    Row(
+        modifier.fillMaxWidth().height(44.dp)
+            .clip(androidx.compose.foundation.shape.CircleShape)
+            .background(cs.surfaceContainerHigh)
+            .padding(start = 14.dp, end = 4.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Icon(Icons.Outlined.Search, null, Modifier.size(20.dp), tint = cs.onSurfaceVariant)
+        Gap(w = 10.dp)
+        androidx.compose.foundation.text.BasicTextField(
+            value = value, onValueChange = onChange, singleLine = true,
+            // The keyboard's search key closes the keyboard so all results are visible.
+            keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
+            keyboardActions = KeyboardActions(onSearch = { focus.clearFocus() }),
+            textStyle = MaterialTheme.typography.bodyLarge.copy(color = cs.onSurface),
+            cursorBrush = androidx.compose.ui.graphics.SolidColor(cs.primary),
+            modifier = Modifier.weight(1f),
+            decorationBox = { inner ->
+                Box(contentAlignment = Alignment.CenterStart) {
+                    if (value.isEmpty()) Text(hint, style = MaterialTheme.typography.bodyLarge, color = cs.onSurfaceVariant,
+                        maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    inner()
+                }
+            },
+        )
+        if (value.isNotEmpty()) IconButton(onClick = { onChange("") }, modifier = Modifier.size(36.dp)) {
+            Icon(Icons.Outlined.Close, "Clear", Modifier.size(18.dp))
+        }
+    }
 }
 
 // ------------------------------------------------------------------ packs
