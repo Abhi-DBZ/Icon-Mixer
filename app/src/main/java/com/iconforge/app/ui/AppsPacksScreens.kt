@@ -26,6 +26,7 @@ import androidx.compose.material.icons.outlined.Palette
 import androidx.compose.material.icons.outlined.Search
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
+import androidx.compose.material3.ElevatedCard
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.FilterChip
@@ -221,7 +222,7 @@ private fun PackCard(
         val matched = apps.mapNotNull { app -> pack.match(app.packageName, app.activityName)?.let { IconSrc.Pack(p.packageName, it) } }
         value = Coverage(apps.size, matched.size) to matched.distinctBy { it.drawable }.take(8)
     }
-    Card(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 6.dp)) {
+    ElevatedCard(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 6.dp)) {
         Column(Modifier.padding(16.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 IconImage(IconSrc.App(p.packageName, ""), 48.dp)

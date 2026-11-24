@@ -40,6 +40,7 @@ import androidx.compose.material.icons.rounded.Add
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
+import androidx.compose.material3.ElevatedCard
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
@@ -165,7 +166,9 @@ fun HomeScreen(vm: MainViewModel, nav: NavHostController) {
                             LazyRow(Modifier.padding(vertical = 8.dp)) {
                                 items(newApps, key = { it.componentKey }) { IconImage(IconSrc.original(it), 44.dp, Modifier.padding(end = 6.dp)) }
                             }
-                            FilledTonalButton(onClick = { nav.navigate(Routes.editor(t.id, "NEW")) }) { Text("Review icons") }
+                            Button(onClick = { nav.navigate(Routes.editor(t.id, "NEW")) },
+                                colors = androidx.compose.material3.ButtonDefaults.buttonColors(
+                                    containerColor = MaterialTheme.colorScheme.tertiary, contentColor = MaterialTheme.colorScheme.onTertiary)) { Text("Review icons") }
                         }
                     }
                 }
@@ -221,7 +224,8 @@ private fun ActiveThemeCard(
     nav: NavHostController, vm: MainViewModel, onAutoFill: () -> Unit,
 ) {
     val base = packs.firstOrNull { it.packageName == t.basePack }
-    Card(onClick = { nav.navigate(Routes.editor(t.id)) }, modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp)) {
+    // Raised card on a light surface: tinted buttons stay visible in light mode too.
+    ElevatedCard(onClick = { nav.navigate(Routes.editor(t.id)) }, modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp)) {
         Column(Modifier.padding(horizontal = 16.dp, vertical = 14.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Column(Modifier.weight(1f)) {

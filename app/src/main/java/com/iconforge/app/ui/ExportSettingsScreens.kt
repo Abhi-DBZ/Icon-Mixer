@@ -46,6 +46,12 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.material.icons.outlined.ExpandMore
+import androidx.compose.material.icons.outlined.ExpandLess
+import androidx.compose.material3.ElevatedCard
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
@@ -94,34 +100,38 @@ fun ExportScreen(nav: NavHostController, themeId: Long) {
             )
         },
     ) { pad ->
-        Column(Modifier.fillMaxSize().padding(pad).verticalScroll(rememberScrollState()).padding(horizontal = 16.dp)) {
+        Column(
+            Modifier.fillMaxSize().padding(pad).verticalScroll(rememberScrollState()).padding(horizontal = 16.dp).padding(bottom = 24.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            val isInstalled = vm.isInstalled(t)
+            val mineInstalled = installed.firstOrNull { it.themeId == t.id }
             Text(
-                "${t.themedApps} of ${t.totalApps} apps have icons (${(t.coverage * 100).toInt()}%). " +
-                    "Apps without one keep their normal icon (or the launcher's fallback).",
+                "${t.themedApps}/${t.totalApps} apps have icons · ${(t.coverage * 100).toInt()}%",
                 style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
-            Gap(h = 12.dp)
 
             // ---- APK
-            Card(Modifier.fillMaxWidth()) {
-                Column(Modifier.padding(16.dp)) {
+            ElevatedCard(Modifier.fillMaxWidth()) {
+                Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Icon(Icons.Outlined.Android, null); Gap(w = 8.dp)
-                        Text("Icon pack APK", style = MaterialTheme.typography.titleMedium)
+                        Text("Icon pack", style = MaterialTheme.typography.titleMedium, modifier = Modifier.weight(1f))
+                        Text(
+                            if (isInstalled) "Installed" + (mineInstalled?.versionName?.let { " · v$it" } ?: "") else "Not installed",
+                            style = MaterialTheme.typography.labelMedium,
+                            color = if (isInstalled) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
                     }
-                    Gap(h = 6.dp)
                     Text(
-                        "A real icon pack with every icon in this theme: pack icons, your manual picks and kept originals. " +
-                            "Install it, then choose “${t.name}” as the icon pack in your launcher." +
-                            if (vm.isInstalled(t)) "\n\nAlready installed — installing again updates it in place." else "",
-                        style = MaterialTheme.typography.bodyMedium,
+                        if (isInstalled) "Building and installing again updates it in place."
+                        else "Install it, then pick “${t.name}” in your launcher's icon settings.",
+                        style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
-                    Gap(h = 12.dp)
                     Button(onClick = vm::buildApk, enabled = !working, modifier = Modifier.fillMaxWidth()) {
                         Text(if (ready != null) "Build again" else "Build icon pack")
                     }
                     if (ready != null) {
-                        Gap(h = 8.dp)
                         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                             FilledTonalButton(onClick = {
                                 if (!ctx.packageManager.canRequestPackageInstalls()) {
@@ -138,154 +148,153 @@ fun ExportScreen(nav: NavHostController, themeId: Long) {
                                 ctx.startActivity(Intent.createChooser(send, "Share icon pack"))
                             }) { Text("Share") }
                         }
-                        Text(
-                            "${ready.length() / 1024} KB · ${vm.packageName(t)}",
-                            style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            modifier = Modifier.padding(top = 6.dp),
-                        )
+                        Text("${ready.length() / 1024} KB", style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                    when (val s = state) {
+                        is ExportViewModel.State.Working -> Column {
+                            Text(s.text, style = MaterialTheme.typography.bodySmall)
+                            LinearProgressIndicator(progress = { s.progress }, modifier = Modifier.fillMaxWidth().padding(top = 6.dp))
+                        }
+                        is ExportViewModel.State.Done -> Text(s.text, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary)
+                        is ExportViewModel.State.Failed -> Text(s.text, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
+                        else -> {}
                     }
                 }
             }
-            Gap(h = 12.dp)
 
-            // ---- installed packs: keep one per name
+            // ---- installed packs (folded; opens by itself when a same-name copy needs attention)
             if (installed.isNotEmpty()) {
-                Card(Modifier.fillMaxWidth()) {
-                    Column(Modifier.padding(vertical = 12.dp)) {
-                        Text("Installed icon packs", style = MaterialTheme.typography.titleMedium,
-                            modifier = Modifier.padding(horizontal = 16.dp))
-                        Text("Packs made by Icon Mixer on this phone. Each theme updates its own pack, so you only need one per name.",
-                            style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp))
+                val problems = installed.count { it.themeId != t.id && it.label == t.name }
+                var open by remember(problems) { mutableStateOf(problems > 0) }
+                ElevatedCard(Modifier.fillMaxWidth()) {
+                    Row(
+                        Modifier.fillMaxWidth().clickable { open = !open }.padding(horizontal = 16.dp, vertical = 12.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Text("Installed icon packs · ${installed.size}", style = MaterialTheme.typography.titleSmall, modifier = Modifier.weight(1f))
+                        if (problems > 0) Text("$problems same name", style = MaterialTheme.typography.labelMedium,
+                            color = MaterialTheme.colorScheme.error, modifier = Modifier.padding(end = 8.dp))
+                        Icon(if (open) Icons.Outlined.ExpandLess else Icons.Outlined.ExpandMore, if (open) "Hide" else "Show")
+                    }
+                    if (open) Column(Modifier.padding(bottom = 8.dp)) {
                         installed.forEach { p ->
                             val mine = p.themeId == t.id
                             val sameName = !mine && p.label == t.name
                             val status = when {
-                                mine -> "This theme's pack — exports update it"
-                                sameName && p.updatable -> "Same name — this theme will update it on the next export"
-                                sameName -> "Same name, old copy that can't be updated (made before Icon Mixer was reinstalled). Remove it."
-                                p.themeId != null -> "Pack of theme \"${themes.firstOrNull { it.id == p.themeId }?.name ?: "?"}\""
-                                !p.updatable -> "Old copy, can't be updated by Icon Mixer"
+                                mine -> "This theme's pack"
+                                sameName && p.updatable -> "Same name — updated by this theme's next export"
+                                sameName -> "Same name, old copy that can't be updated — remove it"
+                                p.themeId != null -> "Theme \"${themes.firstOrNull { it.id == p.themeId }?.name ?: "?"}\""
+                                !p.updatable -> "Old copy, can't be updated"
                                 else -> "Not linked to a theme"
                             }
-                            ListItem(
-                                headlineContent = { Text(p.label + (p.versionName?.let { " · v$it" } ?: "")) },
-                                supportingContent = {
-                                    Text(status, color = when {
+                            Row(Modifier.fillMaxWidth().padding(start = 16.dp, end = 4.dp, top = 2.dp, bottom = 2.dp),
+                                verticalAlignment = Alignment.CenterVertically) {
+                                Column(Modifier.weight(1f)) {
+                                    Text(p.label + (p.versionName?.let { " · v$it" } ?: ""), style = MaterialTheme.typography.bodyMedium)
+                                    Text(status, style = MaterialTheme.typography.labelSmall, color = when {
                                         mine -> MaterialTheme.colorScheme.primary
                                         sameName && !p.updatable -> MaterialTheme.colorScheme.error
                                         else -> MaterialTheme.colorScheme.onSurfaceVariant
                                     })
-                                },
-                                trailingContent = { if (!mine) TextButton(onClick = { vm.uninstall(p.packageName) }) { Text("Remove") } },
-                                colors = androidx.compose.material3.ListItemDefaults.colors(containerColor = androidx.compose.ui.graphics.Color.Transparent),
-                            )
+                                }
+                                if (!mine) TextButton(onClick = { vm.uninstall(p.packageName) }) { Text("Remove") }
+                            }
                         }
                     }
                 }
-                Gap(h = 12.dp)
-            }
-
-            // ---- ZIP
-            Card(Modifier.fillMaxWidth()) {
-                Column(Modifier.padding(16.dp)) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Icon(Icons.Outlined.FolderZip, null); Gap(w = 8.dp)
-                        Text("ZIP backup", style = MaterialTheme.typography.titleMedium)
-                    }
-                    Gap(h = 6.dp)
-                    Text("Icons + mappings + theme details in one file. Import it later or on another phone (also works with exported APKs).",
-                        style = MaterialTheme.typography.bodyMedium)
-                    Gap(h = 12.dp)
-                    OutlinedButton(onClick = { saveZip.launch(vm.fileName(t) + ".zip") }, enabled = !working, modifier = Modifier.fillMaxWidth()) {
-                        Text("Save ZIP backup")
-                    }
-                }
-            }
-
-            // ---- progress / result
-            when (val s = state) {
-                is ExportViewModel.State.Working -> Column(Modifier.padding(vertical = 16.dp)) {
-                    Text(s.text, style = MaterialTheme.typography.bodySmall)
-                    LinearProgressIndicator(progress = { s.progress }, modifier = Modifier.fillMaxWidth().padding(top = 6.dp))
-                }
-                is ExportViewModel.State.Done -> Text(s.text, color = MaterialTheme.colorScheme.primary, modifier = Modifier.padding(vertical = 16.dp))
-                is ExportViewModel.State.Failed -> Text(s.text, color = MaterialTheme.colorScheme.error, modifier = Modifier.padding(vertical = 16.dp))
-                else -> Gap(h = 16.dp)
             }
 
             // ---- options
-            Text("Options", style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.primary)
-            Text("Icon shape (adaptive icons)", style = MaterialTheme.typography.bodyMedium, modifier = Modifier.padding(top = 8.dp))
-            FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                IconShape.entries.forEach { s ->
-                    FilterChip(t.iconShape == s.name, { vm.setIconShape(s.name) }, { Text(s.label, maxLines = 1, softWrap = false) })
+            ElevatedCard(Modifier.fillMaxWidth()) {
+                Column(Modifier.padding(vertical = 12.dp)) {
+                    Text("Options", style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.padding(horizontal = 16.dp))
+                    OptionLabel("Icon shape · adaptive icons")
+                    FlowRow(Modifier.padding(horizontal = 16.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        IconShape.entries.forEach { s ->
+                            FilterChip(t.iconShape == s.name, { vm.setIconShape(s.name) },
+                                { Text(if (s == IconShape.DEFAULT) "Default" else s.label, maxLines = 1, softWrap = false) })
+                        }
+                    }
+                    if (t.iconShape != "DEFAULT") {
+                        val all by vm.settings.shapeAllIcons.collectAsState()
+                        SwitchRow("Shape every icon", "Also icons that aren't adaptive", all) { vm.settings.setShapeAllIcons(it) }
+                    }
+                    OptionLabel("Icon size")
+                    FlowRow(Modifier.padding(horizontal = 16.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        listOf(128 to "Small", 192 to "Standard", 256 to "Sharp").forEach { (px, label) ->
+                            FilterChip(size == px, { vm.settings.setExportSize(px) }, { Text("$label · $px", maxLines = 1, softWrap = false) })
+                        }
+                    }
+                    Gap(h = 4.dp)
+                    val live by vm.settings.liveColours.collectAsState()
+                    SwitchRow(
+                        "Live Material You colours",
+                        if (t.iconShape != "DEFAULT") "Experimental · adaptive icons use the shape instead"
+                        else "Experimental · icons follow your wallpaper colours",
+                        live,
+                    ) { vm.settings.setLiveColours(it) }
+                    SwitchRow("Include the whole base pack", "Themes apps you install later · bigger file", whole) {
+                        vm.settings.setIncludeWholePack(it)
+                    }
                 }
             }
-            if (t.iconShape != "DEFAULT") {
-                val all by vm.settings.shapeAllIcons.collectAsState()
-                ListItem(
-                    modifier = Modifier.clickable { vm.settings.setShapeAllIcons(!all) },
-                    headlineContent = { Text("Apply the shape to every icon") },
-                    supportingContent = {
-                        Text("Also cut pack icons that aren't adaptive (e.g. ones with a square plate drawn in). " +
-                            "Use it when some icons still look square on your home screen.")
-                    },
-                    trailingContent = { Switch(all, { vm.settings.setShapeAllIcons(it) }) },
-                    colors = androidx.compose.material3.ListItemDefaults.colors(containerColor = androidx.compose.ui.graphics.Color.Transparent),
+
+            // ---- ZIP
+            ElevatedCard(Modifier.fillMaxWidth()) {
+                Row(Modifier.padding(start = 16.dp, end = 8.dp, top = 10.dp, bottom = 10.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Icon(Icons.Outlined.FolderZip, null); Gap(w = 12.dp)
+                    Column(Modifier.weight(1f)) {
+                        Text("ZIP backup", style = MaterialTheme.typography.titleSmall)
+                        Text("Icons + theme in one file, to import later", style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                    TextButton(onClick = { saveZip.launch(vm.fileName(t) + ".zip") }, enabled = !working) { Text("Save") }
+                }
+            }
+
+            // ---- how to apply (folded)
+            var howOpen by remember { mutableStateOf(false) }
+            Card(Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.secondaryContainer)) {
+                Row(Modifier.fillMaxWidth().clickable { howOpen = !howOpen }.padding(horizontal = 16.dp, vertical = 12.dp),
+                    verticalAlignment = Alignment.CenterVertically) {
+                    Icon(Icons.Outlined.Info, null); Gap(w = 8.dp)
+                    Text("How to apply it", style = MaterialTheme.typography.titleSmall, modifier = Modifier.weight(1f))
+                    Icon(if (howOpen) Icons.Outlined.ExpandLess else Icons.Outlined.ExpandMore, null)
+                }
+                if (howOpen) Text(
+                    "• ColorOS / OxygenOS: long-press the home screen → Icons (or Wallpapers & style → Icons) → pick “${t.name}”.\n" +
+                        "• Nova / Lawnchair / Smart / Niagara: launcher settings → Icons → Icon pack.\n" +
+                        "• One UI: Good Lock → Theme Park → Icon.\n" +
+                        "• No icon-pack option in your launcher? Use one of the launchers above.\n" +
+                        "After changing icons here, build and install again.",
+                    style = MaterialTheme.typography.bodySmall,
+                    modifier = Modifier.padding(start = 16.dp, end = 16.dp, bottom = 14.dp),
                 )
             }
-            Text("Icon size", style = MaterialTheme.typography.bodyMedium, modifier = Modifier.padding(top = 8.dp))
-            // FlowRow wraps on narrow screens instead of squeezing the last chip.
-            FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                listOf(128 to "Small", 192 to "Standard", 256 to "Sharp").forEach { (px, label) ->
-                    FilterChip(size == px, { vm.settings.setExportSize(px) }, { Text("$label · $px px", maxLines = 1, softWrap = false) })
-                }
-            }
-            val live by vm.settings.liveColours.collectAsState()
-            ListItem(
-                modifier = Modifier.clickable { vm.settings.setLiveColours(!live) },
-                headlineContent = { Text("Live Material You colours (experimental)") },
-                supportingContent = {
-                    Text(
-                        "Icons from Material You packs keep following your wallpaper colours instead of being saved as pictures. " +
-                            if (t.iconShape != "DEFAULT")
-                                "With the ${com.iconforge.app.core.IconShape.of(t.iconShape).label.lowercase()} shape chosen above, adaptive icons are saved as pictures in that shape " +
-                                    "(the launcher would otherwise pick their shape), so only the other icons stay live."
-                            else "Your launcher decides their shape. If they look wrong, turn this off and export again.",
-                    )
-                },
-                trailingContent = { Switch(live, { vm.settings.setLiveColours(it) }) },
-            )
-            ListItem(
-                modifier = Modifier.clickable { vm.settings.setIncludeWholePack(!whole) },
-                headlineContent = { Text("Include the whole base pack") },
-                supportingContent = { Text("Also copies every icon of the base pack, so apps you install later are themed without re-exporting. Bigger and slower.") },
-                trailingContent = { Switch(whole, { vm.settings.setIncludeWholePack(it) }) },
-            )
-
-            // ---- how to apply
-            Card(
-                Modifier.fillMaxWidth().padding(vertical = 12.dp),
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.secondaryContainer),
-            ) {
-                Column(Modifier.padding(16.dp)) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Icon(Icons.Outlined.Info, null); Gap(w = 8.dp)
-                        Text("Applying it", style = MaterialTheme.typography.titleSmall)
-                    }
-                    Gap(h = 6.dp)
-                    Text(
-                        "• ColorOS / OxygenOS: long-press the home screen → Icons (or Wallpapers & style → Icons) → pick “${t.name}”.\n" +
-                            "• Nova / Lawnchair / Smart / Niagara: launcher settings → Look & feel / Icons → Icon pack.\n" +
-                            "• One UI: Good Lock → Theme Park → Icon → choose the pack.\n" +
-                            "• If your phone's own launcher has no icon-pack option, use one of the launchers above.\n\n" +
-                            "After changing icons here, export and install again — the launcher picks up the update.",
-                        style = MaterialTheme.typography.bodySmall,
-                    )
-                }
-            }
         }
+    }
+}
+
+@Composable
+private fun OptionLabel(text: String) = Text(text, style = MaterialTheme.typography.labelLarge,
+    color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 12.dp, bottom = 4.dp))
+
+/** One-line title + short hint + switch; the whole row toggles. */
+@Composable
+private fun SwitchRow(title: String, hint: String, checked: Boolean, onChange: (Boolean) -> Unit) {
+    Row(
+        Modifier.fillMaxWidth().clickable { onChange(!checked) }.padding(horizontal = 16.dp, vertical = 6.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Column(Modifier.weight(1f)) {
+            Text(title, style = MaterialTheme.typography.bodyLarge)
+            Text(hint, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+        Gap(w = 12.dp)
+        Switch(checked, onChange)
     }
 }
 
@@ -340,7 +349,7 @@ fun SettingsScreen(vm: MainViewModel) {
             HorizontalDivider(Modifier.padding(vertical = 8.dp))
             SectionTitle("About")
             ListItem(
-                headlineContent = { Text("Icon Mixer 1.9") },
+                headlineContent = { Text("Icon Mixer 1.9.1") },
                 supportingContent = {
                     Text("Mixes icons from the packs you own into one complete pack. Exported packs are signed with a key kept on this phone; " +
                         "if you reinstall Icon Mixer, uninstall old exported packs before installing new ones.")
