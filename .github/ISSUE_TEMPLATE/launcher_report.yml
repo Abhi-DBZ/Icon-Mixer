@@ -1,0 +1,38 @@
+name: Launcher / export report
+description: An exported icon pack doesn't show up or looks wrong in a launcher
+labels: [launcher]
+body:
+  - type: input
+    id: phone
+    attributes:
+      label: Phone and Android version
+      placeholder: e.g. OnePlus 12, OxygenOS 15 (Android 15)
+    validations:
+      required: true
+  - type: input
+    id: launcher
+    attributes:
+      label: Launcher
+      placeholder: e.g. system launcher, Nova 8, Lawnchair 14
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Icon Mixer version
+      placeholder: e.g. 1.4 (Settings → About)
+  - type: checkboxes
+    id: options
+    attributes:
+      label: Export options used
+      options:
+        - label: Live Material You colours
+        - label: Include the whole base pack
+        - label: An icon shape other than "Launcher default"
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened?
+      description: Does the pack appear in the launcher's icon-pack list? Which icons look wrong? Screenshots help.
+    validations:
+      required: true

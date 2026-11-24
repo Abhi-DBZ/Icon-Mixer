@@ -1,0 +1,27 @@
+name: Bug report
+description: Something in Icon Mixer doesn't work
+labels: [bug]
+body:
+  - type: input
+    id: phone
+    attributes:
+      label: Phone and Android version
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Icon Mixer version
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      placeholder: 1. … 2. … 3. …
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: What did you expect, and what happened instead?
+    validations:
+      required: true

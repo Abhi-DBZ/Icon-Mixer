@@ -1,0 +1,10 @@
+name: Feature idea
+description: Suggest something new
+labels: [enhancement]
+body:
+  - type: textarea
+    id: idea
+    attributes:
+      label: What would you like Icon Mixer to do?
+    validations:
+      required: true
