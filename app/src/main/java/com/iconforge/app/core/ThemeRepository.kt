@@ -62,6 +62,14 @@ class ThemeRepository(
         db.themes().update(t.copy(name = name.trim().ifEmpty { t.name }, updatedAt = System.currentTimeMillis()))
     }
 
+    /** Points the theme at an existing pack package (com.iconforge.pack.<suffix>) so exports update it. */
+    suspend fun setPackSuffix(id: Long, suffix: String) {
+        val t = db.themes().get(id) ?: return
+        if (t.packSuffix != suffix && db.themes().all().none { it.id != id && it.packSuffix == suffix }) {
+            db.themes().update(t.copy(packSuffix = suffix))
+        }
+    }
+
     suspend fun setBasePack(id: Long, pack: String?) {
         val t = db.themes().get(id) ?: return
         db.themes().update(t.copy(basePack = pack, updatedAt = System.currentTimeMillis()))

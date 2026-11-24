@@ -46,6 +46,7 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
@@ -72,6 +73,10 @@ fun ExportScreen(nav: NavHostController, themeId: Long) {
     val whole by vm.settings.includeWholePack.collectAsState()
     val t = theme ?: return
     val ready = (state as? ExportViewModel.State.ApkReady)?.file
+    val installed by vm.installed.collectAsState()
+    val themes by ctx.app.db.themes().observe().collectAsState(initial = emptyList())
+    // Packs can be installed/removed outside the app: refresh on resume and after each step.
+    androidx.lifecycle.compose.LifecycleResumeEffect(state) { vm.refreshInstalled(); onPauseOrDispose { } }
 
     val saveApk = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/vnd.android.package-archive")) { uri ->
         if (uri != null && ready != null) vm.saveApk(ready, uri)
@@ -142,6 +147,44 @@ fun ExportScreen(nav: NavHostController, themeId: Long) {
                 }
             }
             Gap(h = 12.dp)
+
+            // ---- installed packs: keep one per name
+            if (installed.isNotEmpty()) {
+                Card(Modifier.fillMaxWidth()) {
+                    Column(Modifier.padding(vertical = 12.dp)) {
+                        Text("Installed icon packs", style = MaterialTheme.typography.titleMedium,
+                            modifier = Modifier.padding(horizontal = 16.dp))
+                        Text("Packs made by Icon Mixer on this phone. Each theme updates its own pack, so you only need one per name.",
+                            style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp))
+                        installed.forEach { p ->
+                            val mine = p.themeId == t.id
+                            val sameName = !mine && p.label == t.name
+                            val status = when {
+                                mine -> "This theme's pack — exports update it"
+                                sameName && p.updatable -> "Same name — this theme will update it on the next export"
+                                sameName -> "Same name, old copy that can't be updated (made before Icon Mixer was reinstalled). Remove it."
+                                p.themeId != null -> "Pack of theme \"${themes.firstOrNull { it.id == p.themeId }?.name ?: "?"}\""
+                                !p.updatable -> "Old copy, can't be updated by Icon Mixer"
+                                else -> "Not linked to a theme"
+                            }
+                            ListItem(
+                                headlineContent = { Text(p.label + (p.versionName?.let { " · v$it" } ?: "")) },
+                                supportingContent = {
+                                    Text(status, color = when {
+                                        mine -> MaterialTheme.colorScheme.primary
+                                        sameName && !p.updatable -> MaterialTheme.colorScheme.error
+                                        else -> MaterialTheme.colorScheme.onSurfaceVariant
+                                    })
+                                },
+                                trailingContent = { if (!mine) TextButton(onClick = { vm.uninstall(p.packageName) }) { Text("Remove") } },
+                                colors = androidx.compose.material3.ListItemDefaults.colors(containerColor = androidx.compose.ui.graphics.Color.Transparent),
+                            )
+                        }
+                    }
+                }
+                Gap(h = 12.dp)
+            }
 
             // ---- ZIP
             Card(Modifier.fillMaxWidth()) {
@@ -279,7 +322,7 @@ fun SettingsScreen(vm: MainViewModel) {
             HorizontalDivider(Modifier.padding(vertical = 8.dp))
             SectionTitle("About")
             ListItem(
-                headlineContent = { Text("Icon Mixer 1.7") },
+                headlineContent = { Text("Icon Mixer 1.7.1") },
                 supportingContent = {
                     Text("Mixes icons from the packs you own into one complete pack. Exported packs are signed with a key kept on this phone; " +
                         "if you reinstall Icon Mixer, uninstall old exported packs before installing new ones.")

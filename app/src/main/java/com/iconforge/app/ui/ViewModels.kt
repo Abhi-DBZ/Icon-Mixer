@@ -359,6 +359,11 @@ class ExportViewModel(application: Application, val themeId: Long) : AndroidView
 
     fun setIconShape(shape: String) = viewModelScope.launch { a.repo.setIconShape(themeId, shape) }
     fun isInstalled(t: ThemeEntity) = a.exporter.isInstalled(t)
+
+    /** Icon Mixer packs installed on the phone (refreshed when the screen resumes). */
+    val installed = MutableStateFlow<List<com.iconforge.app.export.PackExporter.InstalledPack>>(emptyList())
+    fun refreshInstalled() = viewModelScope.launch { installed.value = a.exporter.installedPacks() }
+    fun uninstall(pkg: String) = a.exporter.uninstall(pkg)
     fun packageName(t: ThemeEntity) = a.exporter.packageNameFor(t)
     fun fileName(t: ThemeEntity) = a.exporter.fileName(t.name)
 }

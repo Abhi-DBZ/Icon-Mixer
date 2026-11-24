@@ -63,7 +63,62 @@ class PackExporter(
 ) {
     private val exportDir get() = File(context.cacheDir, "exports").apply { mkdirs() }
 
-    fun packageNameFor(theme: ThemeEntity) = "com.iconforge.pack.${theme.packSuffix}"
+    fun packageNameFor(theme: ThemeEntity) = "$PACK_PREFIX${theme.packSuffix}"
+
+    /** An icon pack this app exported that is installed on the phone. */
+    data class InstalledPack(
+        val packageName: String, val label: String, val versionName: String?,
+        /** Signed with this phone's export key, so a re-export can update it in place. */
+        val updatable: Boolean,
+        /** Theme that exports to this package, if any. */
+        val themeId: Long?,
+    )
+
+    /** All installed packs made by Icon Mixer. */
+    suspend fun installedPacks(): List<InstalledPack> = withContext(Dispatchers.IO) {
+        val pm = context.packageManager
+        val mine = runCatching { PackSigner.keyAndCert().second.encoded }.getOrNull()
+        val themes = db.themes().all()
+        pm.queryIntentActivities(Intent("org.adw.launcher.THEMES"), 0)
+            .mapNotNull { it.activityInfo?.packageName }.distinct()
+            .filter { it.startsWith(PACK_PREFIX) }
+            .mapNotNull { pkg ->
+                val info = runCatching {
+                    @Suppress("DEPRECATION")
+                    if (Build.VERSION.SDK_INT >= 28) pm.getPackageInfo(pkg, android.content.pm.PackageManager.GET_SIGNING_CERTIFICATES)
+                    else pm.getPackageInfo(pkg, android.content.pm.PackageManager.GET_SIGNATURES)
+                }.getOrNull() ?: return@mapNotNull null
+                @Suppress("DEPRECATION")
+                val signers = if (Build.VERSION.SDK_INT >= 28) info.signingInfo?.apkContentsSigners else info.signatures
+                val updatable = mine != null && signers?.any { it.toByteArray().contentEquals(mine) } == true
+                InstalledPack(
+                    pkg, info.applicationInfo?.loadLabel(pm)?.toString() ?: pkg, info.versionName, updatable,
+                    themes.firstOrNull { packageNameFor(it) == pkg }?.id,
+                )
+            }
+            .sortedBy { it.label.lowercase() }
+    }
+
+    /**
+     * Keeps one installed pack per name: if this theme's own pack isn't installed but another
+     * pack with the same name is (made by this phone's Icon Mixer, not used by another theme),
+     * the theme takes over that package so installing updates it instead of adding a second app.
+     */
+    suspend fun adoptSameNamePack(themeId: Long) {
+        val t = db.themes().get(themeId) ?: return
+        if (isInstalled(t)) return
+        val match = installedPacks().firstOrNull { it.updatable && it.themeId == null && it.label == t.name } ?: return
+        repo.setPackSuffix(themeId, match.packageName.removePrefix(PACK_PREFIX))
+    }
+
+    /** Opens the system uninstall screen for an exported pack. */
+    fun uninstall(packageName: String) {
+        context.startActivity(
+            Intent(Intent.ACTION_DELETE, Uri.parse("package:$packageName")).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
+        )
+    }
+
+    companion object { const val PACK_PREFIX = "com.iconforge.pack." }
 
     // ------------------------------------------------------------ render
 
@@ -206,6 +261,7 @@ class PackExporter(
 
     /** Builds and signs the pack. Returns the APK in the app's cache. */
     suspend fun buildApk(themeId: Long, progress: (Float, String) -> Unit): File {
+        adoptSameNamePack(themeId)
         val r = render(themeId, progress, forApk = true, live = settings.liveColours.value)
         return withContext(Dispatchers.IO) {
             progress(0.92f, "Building APK")
@@ -329,6 +385,8 @@ class PackExporter(
     private suspend fun importJson(json: JSONObject, files: Map<String, ByteArray>): Long {
         val base = json.optString("basePack").takeIf { it.isNotEmpty() && it != "null" && packs.load(it) != null }
         val id = repo.createTheme(uniqueName(json.optString("name", "Imported theme")), null)
+        // Keep updating the pack this theme was exported as, when it's installed here.
+        json.optString("packageName").takeIf { it.startsWith(PACK_PREFIX) }?.let { repo.setPackSuffix(id, it.removePrefix(PACK_PREFIX)) }
         if (base != null) repo.setBasePack(id, base)
         json.optString("iconShape").takeIf { it.isNotEmpty() }?.let { repo.setIconShape(id, it) }
         val dir = File(repo.customDir, "t$id").apply { mkdirs() }
