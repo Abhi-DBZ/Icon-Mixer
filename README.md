@@ -32,6 +32,7 @@ apps" when Android asks). Android 8.0 or newer.
   image.
 - **Theme editor**: grid or list view, filters (missing / auto / manual / new / system),
   multi-select bulk edits, undo, reset an app or the whole theme.
+- **App colours**: wallpaper colours (Android 12+) or one of 12 colours, each a full Material You palette; pure black dark theme.
 - **Icon shape for adaptive icons**: circle, squircle, rounded square, teardrop or square,
   even on launchers that can't change icon shape.
 - **Adjust icons**: size and a coloured background plate, so icons from different packs blend.

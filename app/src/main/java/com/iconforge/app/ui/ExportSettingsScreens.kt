@@ -6,6 +6,15 @@ import android.provider.Settings as AndroidSettings
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.clickable
+import androidx.compose.material.icons.outlined.Contrast
+import androidx.compose.material.icons.outlined.Wallpaper
+import androidx.compose.material.icons.outlined.Check
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.border
+import androidx.compose.foundation.background
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
@@ -226,6 +235,7 @@ fun SettingsScreen(vm: MainViewModel) {
     val mode by s.themeMode.collectAsState()
     val black by s.pureBlack.collectAsState()
     val dynamic by s.dynamicColor.collectAsState()
+    val seed by s.seedColor.collectAsState()
     val notify by s.notifyNewApps.collectAsState()
 
     Scaffold(topBar = { TopAppBar(title = { Text("Settings") }) }) { pad ->
@@ -236,17 +246,20 @@ fun SettingsScreen(vm: MainViewModel) {
                     FilterChip(mode == m, { s.setThemeMode(m) }, { Text(l) })
                 }
             }
-            ListItem(
-                modifier = Modifier.clickable { s.setPureBlack(!black) },
-                headlineContent = { Text("Pure black") },
-                supportingContent = { Text("Black background in dark mode (AMOLED)") },
-                trailingContent = { Switch(black, { s.setPureBlack(it) }) },
+            Text("Colour", style = MaterialTheme.typography.bodyMedium,
+                modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 16.dp, bottom = 8.dp))
+            ColourPicker(
+                wallpaper = dynamic && android.os.Build.VERSION.SDK_INT >= 31,
+                seed = seed,
+                onWallpaper = { s.setDynamicColor(true) },
+                onColour = { s.setSeedColor(it) },
             )
             ListItem(
-                modifier = Modifier.clickable { s.setDynamicColor(!dynamic) },
-                headlineContent = { Text("Wallpaper colours") },
-                supportingContent = { Text("Material You dynamic colour (Android 12+)") },
-                trailingContent = { Switch(dynamic, { s.setDynamicColor(it) }) },
+                modifier = Modifier.clickable { s.setPureBlack(!black) },
+                leadingContent = { Icon(Icons.Outlined.Contrast, null) },
+                headlineContent = { Text("Pure black dark theme") },
+                supportingContent = { Text("True black backgrounds for AMOLED screens") },
+                trailingContent = { Switch(black, { s.setPureBlack(it) }) },
             )
             HorizontalDivider(Modifier.padding(vertical = 8.dp))
             SectionTitle("New apps")
@@ -266,7 +279,7 @@ fun SettingsScreen(vm: MainViewModel) {
             HorizontalDivider(Modifier.padding(vertical = 8.dp))
             SectionTitle("About")
             ListItem(
-                headlineContent = { Text("Icon Mixer 1.5.1") },
+                headlineContent = { Text("Icon Mixer 1.6") },
                 supportingContent = {
                     Text("Mixes icons from the packs you own into one complete pack. Exported packs are signed with a key kept on this phone; " +
                         "if you reinstall Icon Mixer, uninstall old exported packs before installing new ones.")
@@ -274,4 +287,45 @@ fun SettingsScreen(vm: MainViewModel) {
             )
         }
     }
+}
+
+/** Wallpaper colours (Android 12+) or one of the app colours; the chosen one shows a tick. */
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun ColourPicker(wallpaper: Boolean, seed: Int, onWallpaper: () -> Unit, onColour: (Int) -> Unit) {
+    val cs = MaterialTheme.colorScheme
+    FlowRow(
+        Modifier.fillMaxWidth().padding(horizontal = 16.dp),
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
+        if (android.os.Build.VERSION.SDK_INT >= 31) {
+            Swatch(selected = wallpaper, fill = cs.surfaceContainerHighest, label = "Wallpaper colours", onClick = onWallpaper) {
+                Icon(Icons.Outlined.Wallpaper, null, tint = if (wallpaper) cs.onPrimary else cs.onSurfaceVariant)
+            }
+        }
+        APP_COLOURS.forEach { (name, c) ->
+            val on = !wallpaper && seed == c
+            Swatch(selected = on, fill = androidx.compose.ui.graphics.Color(c), label = name, onClick = { onColour(c) }) {
+                if (on) Icon(Icons.Outlined.Check, null, tint = androidx.compose.ui.graphics.Color.White)
+            }
+        }
+    }
+}
+
+@Composable
+private fun Swatch(
+    selected: Boolean, fill: androidx.compose.ui.graphics.Color, label: String, onClick: () -> Unit,
+    content: @Composable () -> Unit,
+) {
+    val cs = MaterialTheme.colorScheme
+    androidx.compose.foundation.layout.Box(
+        Modifier.size(48.dp)
+            .clip(androidx.compose.foundation.shape.CircleShape)
+            .background(if (selected && fill == cs.surfaceContainerHighest) cs.primary else fill)
+            .then(if (selected) Modifier.border(3.dp, cs.outline, androidx.compose.foundation.shape.CircleShape) else Modifier)
+            .clickable(onClickLabel = label, onClick = onClick)
+            .semantics { contentDescription = label },
+        contentAlignment = Alignment.Center,
+    ) { content() }
 }

@@ -53,12 +53,12 @@ import com.iconforge.app.data.Settings
 
 // ------------------------------------------------------------------ theme
 
-private val SeedLight = lightColorScheme(
-    primary = Color(0xFF3F51B5), secondary = Color(0xFF5C6BC0), tertiary = Color(0xFFE65100),
-)
-private val SeedDark = darkColorScheme(
-    primary = Color(0xFFB8C4FF), secondary = Color(0xFFC0C6E8), tertiary = Color(0xFFFFB68F),
-)
+/** App colours offered in Settings (wallpaper colours come first, on Android 12+). */
+val APP_COLOURS = listOf(
+    "Indigo" to 0xFF3D4FC4, "Blue" to 0xFF1E88E5, "Teal" to 0xFF00897B, "Green" to 0xFF43A047,
+    "Lime" to 0xFF7CB342, "Amber" to 0xFFFFB300, "Orange" to 0xFFF4511E, "Red" to 0xFFE53935,
+    "Pink" to 0xFFD81B60, "Purple" to 0xFF8E24AA, "Brown" to 0xFF6D4C41, "Slate" to 0xFF546E7A,
+).map { (n, c) -> n to c.toInt() }
 
 private fun ColorScheme.pureBlack() = copy(
     background = Color.Black, surface = Color.Black, surfaceContainerLowest = Color.Black,
@@ -72,6 +72,7 @@ fun IconForgeTheme(settings: Settings, content: @Composable () -> Unit) {
     val mode by settings.themeMode.collectAsState()
     val black by settings.pureBlack.collectAsState()
     val dynamic by settings.dynamicColor.collectAsState()
+    val seed by settings.seedColor.collectAsState()
     val dark = when (mode) {
         Settings.MODE_LIGHT -> false
         Settings.MODE_DARK -> true
@@ -79,8 +80,7 @@ fun IconForgeTheme(settings: Settings, content: @Composable () -> Unit) {
     }
     var scheme = when {
         dynamic && Build.VERSION.SDK_INT >= 31 -> if (dark) dynamicDarkColorScheme(ctx) else dynamicLightColorScheme(ctx)
-        dark -> SeedDark
-        else -> SeedLight
+        else -> com.materialkolor.dynamicColorScheme(seedColor = Color(seed), isDark = dark, isAmoled = false)
     }
     if (dark && black) scheme = scheme.pureBlack()
     MaterialTheme(colorScheme = scheme, content = content)
