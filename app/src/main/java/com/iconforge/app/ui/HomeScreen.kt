@@ -195,9 +195,10 @@ fun HomeScreen(vm: MainViewModel, nav: NavHostController) {
         vm.createTheme(name, pack) { id -> nav.navigate(Routes.editor(id, "MISSING")) }
     }
     autoFillFor?.let { id ->
-        AutoFillDialog(onDismiss = { autoFillFor = null }) { m, g, gen ->
+        val packLabel = themes.firstOrNull { it.id == id }?.basePack?.let { b -> packs.firstOrNull { it.packageName == b }?.label }
+        AutoFillDialog(packLabel, onDismiss = { autoFillFor = null }) { g, gen, others ->
             autoFillFor = null
-            vm.smartFill(id, m, g, gen) { toReview -> if (toReview > 0) nav.navigate(Routes.editor(id, "REVIEW")) }
+            vm.smartFill(id, g, gen, others) { toReview -> if (toReview > 0) nav.navigate(Routes.editor(id, "REVIEW")) }
         }
     }
     renaming?.let { th ->
@@ -376,10 +377,11 @@ fun TextDialog(title: String, initial: String, onDismiss: () -> Unit, onOk: (Str
 
 /** Choose what Auto-fill may use. Guesses and generated icons are marked "to review". */
 @Composable
-fun AutoFillDialog(onDismiss: () -> Unit, onRun: (matches: Boolean, guesses: Boolean, generate: Boolean) -> Unit) {
-    var matches by remember { mutableStateOf(true) }
+fun AutoFillDialog(packLabel: String?, onDismiss: () -> Unit, onRun: (guesses: Boolean, generate: Boolean, otherPacks: Boolean) -> Unit) {
+    val pack = packLabel ?: "your theme's pack"
     var guesses by remember { mutableStateOf(true) }
     var generate by remember { mutableStateOf(true) }
+    var others by remember { mutableStateOf(false) }
     @Composable
     fun option(checked: Boolean, onChange: (Boolean) -> Unit, title: String, body: String) {
         Row(Modifier.fillMaxWidth().clickable { onChange(!checked) }.padding(vertical = 6.dp), verticalAlignment = Alignment.Top) {
@@ -395,12 +397,15 @@ fun AutoFillDialog(onDismiss: () -> Unit, onRun: (matches: Boolean, guesses: Boo
         title = { Text("Auto-fill missing icons") },
         text = {
             Column(Modifier.verticalScroll(rememberScrollState())) {
-                option(matches, { matches = it }, "Matches from your other packs", "Icons other installed packs made for exactly that app.")
-                option(guesses, { guesses = it }, "Best guesses by name", "e.g. a \"bank\" icon for a banking app. You review these.")
-                option(generate, { generate = it }, "Generate the rest", "The app's own icon redrawn in your pack's style (its plate, mask and size). You review these.")
+                Text("Uses only $pack, so the theme keeps one look.",
+                    style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Gap(h = 4.dp)
+                option(guesses, { guesses = it }, "Best guesses by name", "Icons in $pack whose name fits the app, e.g. \"bank\" for a banking app. You review these.")
+                option(generate, { generate = it }, "Generate the rest", "The app's own icon redrawn in $pack's style. You review these.")
+                option(others, { others = it }, "Also use my other icon packs", "Takes icons from your other packs too. Fills more apps, but mixes styles.")
             }
         },
-        confirmButton = { TextButton(onClick = { onRun(matches, guesses, generate) }, enabled = matches || guesses || generate) { Text("Fill") } },
+        confirmButton = { TextButton(onClick = { onRun(guesses, generate, others) }) { Text("Fill") } },
         dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } },
     )
 }

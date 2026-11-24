@@ -120,8 +120,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     /** One tap towards 100% (see ThemeRepository.smartFill). */
-    fun smartFill(themeId: Long, matches: Boolean, guesses: Boolean, generate: Boolean, onDone: (Int) -> Unit = {}) = work("Filling icons…") {
-        val r = repo.smartFill(themeId, matches, guesses, generate)
+    fun smartFill(themeId: Long, guesses: Boolean, generate: Boolean, otherPacks: Boolean, onDone: (Int) -> Unit = {}) = work("Filling icons…") {
+        val r = repo.smartFill(themeId, guesses, generate, otherPacks)
         val c = repo.coverage(themeId)
         say(if (r.total == 0) "Nothing more to fill" else
             "${r.matched} matched · ${r.guessed} guessed · ${r.generated} generated — coverage ${c.percent}%")
@@ -267,12 +267,8 @@ class PickerViewModel(application: Application, val themeId: Long, val keys: Lis
 
     fun keepOriginal(done: () -> Unit) = viewModelScope.launch { a.repo.assign(themeId, targets.value, Source.ORIGINAL); done() }
 
-    /** Pack whose style kit "Generate" uses: the theme's base pack, else one that has a kit. */
-    suspend fun stylePack(): String? {
-        val t = a.db.themes().get(themeId)
-        val all = a.db.packs().all().map { it.packageName }
-        return (listOfNotNull(t?.basePack) + all).firstOrNull { a.packs.load(it)?.hasStyle == true } ?: t?.basePack ?: all.firstOrNull()
-    }
+    /** "Generate" always uses the theme's own pack, so the theme keeps one look. */
+    suspend fun stylePack(): String? = a.repo.themePack(themeId)
 
     fun generate(done: () -> Unit) = viewModelScope.launch {
         val p = stylePack() ?: return@launch

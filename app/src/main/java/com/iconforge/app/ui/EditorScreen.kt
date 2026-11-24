@@ -159,7 +159,7 @@ fun EditorScreen(main: MainViewModel, nav: NavHostController, themeId: Long, ini
                     if (rows.any { it.app.componentKey in sel && it.mapping?.isGuess == true }) TextButton(onClick = vm::accept) { Text("Keep") }
                     TextButton(onClick = {
                         scope.launch {
-                            val p = stylePackFor(main, theme?.basePack)
+                            val p = stylePackFor(main, themeId)
                             if (p != null) vm.generate(p) else main.say("No icon pack to take a style from")
                         }
                     }) { Text("Generate") }
@@ -213,9 +213,9 @@ fun EditorScreen(main: MainViewModel, nav: NavHostController, themeId: Long, ini
       }
     }
 
-    if (autoFill) AutoFillDialog(onDismiss = { autoFill = false }) { m, g, gen ->
+    if (autoFill) AutoFillDialog(packs.firstOrNull { it.packageName == theme?.basePack }?.label, onDismiss = { autoFill = false }) { g, gen, others ->
         autoFill = false
-        main.smartFill(themeId, m, g, gen) { n -> if (n > 0) vm.filter.value = EditorViewModel.Filter.REVIEW }
+        main.smartFill(themeId, g, gen, others) { n -> if (n > 0) vm.filter.value = EditorViewModel.Filter.REVIEW }
     }
 
     if (shapeDialog) ShapeDialog(shape, rows.firstOrNull()?.app?.let { IconSrc.original(it) }, onDismiss = { shapeDialog = false }) {
@@ -277,11 +277,8 @@ private fun PackChooserDialog(action: PackAction, packs: List<IconPackEntity>, o
     )
 }
 
-/** Base pack if it has a style kit, else any installed pack that does. */
-suspend fun stylePackFor(main: MainViewModel, base: String?): String? {
-    val all = main.packs.value.map { it.packageName }
-    return (listOfNotNull(base) + all).firstOrNull { main.a.packs.load(it)?.hasStyle == true } ?: base ?: all.firstOrNull()
-}
+/** The theme's own pack: "Generate" never borrows another pack's style. */
+suspend fun stylePackFor(main: MainViewModel, themeId: Long): String? = main.a.repo.themePack(themeId)
 
 private fun statusOf(r: AppRow) = when {
     r.mapping == null -> "missing"

@@ -198,21 +198,30 @@ class ThemeRepository(
         val total get() = matched + guessed + generated
     }
 
+    /** The pack a theme is built on: its base pack, else the pack most of its icons come from. */
+    suspend fun themePack(themeId: Long): String? {
+        val t = db.themes().get(themeId) ?: return null
+        return t.basePack ?: db.mappings().forTheme(themeId).mapNotNull { it.iconPack }
+            .groupingBy { it }.eachCount().maxByOrNull { it.value }?.key
+    }
+
     /**
-     * One tap towards 100%: for apps without an icon, in this order
-     *  1. icons other installed packs made for exactly that app,
+     * One tap towards 100%, keeping the theme's look: by default only the theme's own pack is
+     * used. For apps without an icon, in this order
+     *  1. icons the pack(s) made for exactly that app,
      *  2. best name guesses (whole-word matches) — marked "to review",
-     *  3. the app's own icon redrawn in the base pack's style — marked "to review".
+     *  3. the app's own icon redrawn in the theme pack's style — marked "to review".
+     * [otherPacks] lets steps 1–2 also use the other installed packs (mixes styles).
      */
-    suspend fun smartFill(themeId: Long, matches: Boolean, guesses: Boolean, generate: Boolean): FillResult {
+    suspend fun smartFill(themeId: Long, guesses: Boolean, generate: Boolean, otherPacks: Boolean): FillResult {
         var r = FillResult(0, 0, 0)
+        val own = themePack(themeId)
         change(themeId, null, "Auto-fill") {
-            val theme = db.themes().get(themeId) ?: return@change
-            val order = (listOfNotNull(theme.basePack) + db.packs().all().sortedByDescending { it.mappedComponents }
-                .map { it.packageName }).distinct()
+            val others = if (otherPacks) db.packs().all().sortedByDescending { it.mappedComponents }.map { it.packageName } else emptyList()
+            val order = (listOfNotNull(own) + others).distinct()
             suspend fun missing(existing: Set<String>) = db.apps().all().filter { it.componentKey !in existing }
             var matched = 0; var guessed = 0; var generated = 0
-            if (matches) for (p in order) {
+            for (p in order) {
                 matched += autoMatchInternal(themeId, p, onlyMissing = true, overwriteManual = false, keys = null)
             }
             if (guesses) {
@@ -229,7 +238,8 @@ class ThemeRepository(
                 db.mappings().put(out); guessed = out.size
             }
             if (generate) {
-                val stylePack = order.firstOrNull { packs.load(it)?.hasStyle == true } ?: theme.basePack ?: order.firstOrNull()
+                // Always the theme's own pack (no style kit → the app icon in the theme's shape).
+                val stylePack = own
                 if (stylePack != null) {
                     val have = db.mappings().forTheme(themeId).map { it.componentKey }.toSet()
                     val out = missing(have).map {
@@ -320,9 +330,8 @@ class ThemeRepository(
         for (theme in db.themes().all()) {
             if (added.isNotEmpty() && !firstRun) {
                 val keys = added.map { it.componentKey }
-                val used = db.mappings().forTheme(theme.id).mapNotNull { it.iconPack }
-                    .groupingBy { it }.eachCount().entries.sortedByDescending { it.value }.map { it.key }
-                for (p in (listOfNotNull(theme.basePack) + used).distinct()) {
+                // Only the theme's own pack, so new apps never bring in another pack's style.
+                themePack(theme.id)?.let { p ->
                     autoMatchInternal(theme.id, p, onlyMissing = true, overwriteManual = false, keys = keys)
                 }
                 if (theme.id == settings.activeTheme.value) {
