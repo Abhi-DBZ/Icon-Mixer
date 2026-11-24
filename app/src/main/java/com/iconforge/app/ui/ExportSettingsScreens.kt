@@ -222,6 +222,19 @@ fun ExportScreen(nav: NavHostController, themeId: Long) {
                     FilterChip(t.iconShape == s.name, { vm.setIconShape(s.name) }, { Text(s.label, maxLines = 1, softWrap = false) })
                 }
             }
+            if (t.iconShape != "DEFAULT") {
+                val all by vm.settings.shapeAllIcons.collectAsState()
+                ListItem(
+                    modifier = Modifier.clickable { vm.settings.setShapeAllIcons(!all) },
+                    headlineContent = { Text("Apply the shape to every icon") },
+                    supportingContent = {
+                        Text("Also cut pack icons that aren't adaptive (e.g. ones with a square plate drawn in). " +
+                            "Use it when some icons still look square on your home screen.")
+                    },
+                    trailingContent = { Switch(all, { vm.settings.setShapeAllIcons(it) }) },
+                    colors = androidx.compose.material3.ListItemDefaults.colors(containerColor = androidx.compose.ui.graphics.Color.Transparent),
+                )
+            }
             Text("Icon size", style = MaterialTheme.typography.bodyMedium, modifier = Modifier.padding(top = 8.dp))
             // FlowRow wraps on narrow screens instead of squeezing the last chip.
             FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -234,8 +247,13 @@ fun ExportScreen(nav: NavHostController, themeId: Long) {
                 modifier = Modifier.clickable { vm.settings.setLiveColours(!live) },
                 headlineContent = { Text("Live Material You colours (experimental)") },
                 supportingContent = {
-                    Text("Icons from Material You packs keep following your wallpaper colours instead of being saved as pictures. " +
-                        "Icon shape and size adjustments don't apply to them. If your launcher shows them wrong, turn this off and export again.")
+                    Text(
+                        "Icons from Material You packs keep following your wallpaper colours instead of being saved as pictures. " +
+                            if (t.iconShape != "DEFAULT")
+                                "With the ${com.iconforge.app.core.IconShape.of(t.iconShape).label.lowercase()} shape chosen above, adaptive icons are saved as pictures in that shape " +
+                                    "(the launcher would otherwise pick their shape), so only the other icons stay live."
+                            else "Your launcher decides their shape. If they look wrong, turn this off and export again.",
+                    )
                 },
                 trailingContent = { Switch(live, { vm.settings.setLiveColours(it) }) },
             )
@@ -322,7 +340,7 @@ fun SettingsScreen(vm: MainViewModel) {
             HorizontalDivider(Modifier.padding(vertical = 8.dp))
             SectionTitle("About")
             ListItem(
-                headlineContent = { Text("Icon Mixer 1.7.2") },
+                headlineContent = { Text("Icon Mixer 1.7.3") },
                 supportingContent = {
                     Text("Mixes icons from the packs you own into one complete pack. Exported packs are signed with a key kept on this phone; " +
                         "if you reinstall Icon Mixer, uninstall old exported packs before installing new ones.")

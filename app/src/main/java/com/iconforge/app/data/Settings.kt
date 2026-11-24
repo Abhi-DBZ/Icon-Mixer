@@ -22,6 +22,7 @@ class Settings(context: Context) {
     private val _editorList = bool("editorList", false)
     private val _autoUpdatePack = bool("autoUpdatePack", true)
     private val _liveColours = bool("liveColours", false)
+    private val _shapeAllIcons = bool("shapeAllIcons", false)
 
     val themeMode: StateFlow<Int> = _themeMode
     val pureBlack: StateFlow<Boolean> = _pureBlack
@@ -39,6 +40,8 @@ class Settings(context: Context) {
     val autoUpdatePack: StateFlow<Boolean> = _autoUpdatePack
     /** Export Material You (XML) pack icons as live resources instead of images. */
     val liveColours: StateFlow<Boolean> = _liveColours
+    /** Cut every icon to the theme's shape, not only adaptive ones. */
+    val shapeAllIcons: StateFlow<Boolean> = _shapeAllIcons
 
     fun setThemeMode(v: Int) { _themeMode.value = v; prefs.edit().putInt("themeMode", v).apply() }
     fun setPureBlack(v: Boolean) { _pureBlack.value = v; prefs.edit().putBoolean("pureBlack", v).apply() }
@@ -52,6 +55,7 @@ class Settings(context: Context) {
     fun setNotifyNewApps(v: Boolean) { _notifyNewApps.value = v; prefs.edit().putBoolean("notifyNewApps", v).apply() }
     fun setExportSize(v: Int) { _exportSize.value = v; prefs.edit().putInt("exportSize", v).apply() }
     fun setAutoUpdatePack(v: Boolean) { _autoUpdatePack.value = v; prefs.edit().putBoolean("autoUpdatePack", v).apply() }
+    fun setShapeAllIcons(v: Boolean) { _shapeAllIcons.value = v; prefs.edit().putBoolean("shapeAllIcons", v).apply() }
     fun setLiveColours(v: Boolean) { _liveColours.value = v; prefs.edit().putBoolean("liveColours", v).apply() }
     fun setEditorList(v: Boolean) { _editorList.value = v; prefs.edit().putBoolean("editorList", v).apply() }
     fun setIncludeWholePack(v: Boolean) { _includeWholePack.value = v; prefs.edit().putBoolean("includeWholePack", v).apply() }

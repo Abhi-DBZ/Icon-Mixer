@@ -98,6 +98,10 @@ class LiveCopyTest {
                 val copier = LiveCopier(src, "com.example.mypack")
                 assertTrue("adaptive icon should copy ($extra)", copier.collect("camera", "camera_live", bundle))
                 assertFalse("bitmap icons stay rasterised", copier.collect("plain", "plain_live", bundle))
+                // With a fixed icon shape, adaptive icons are drawn as pictures; plain vectors stay live.
+                val shaped = LiveBundle()
+                assertFalse("adaptive refused with a shape", copier.collect("camera", "c2", shaped, allowAdaptive = false))
+                assertTrue("vector still live with a shape", copier.collect("glyph", "g2", shaped, allowAdaptive = false))
             }
             val spec = PackSpec(
                 packageName = "com.iconforge.pack.livetest", label = "Live test", versionCode = 1, versionName = "1",

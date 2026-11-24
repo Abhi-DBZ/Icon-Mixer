@@ -69,7 +69,7 @@ sealed interface IconSrc {
 }
 
 /** Loads icons as bitmaps, with a memory-bounded cache shared by the whole UI. */
-class IconLoader(private val context: Context, private val packs: IconPacks) {
+class IconLoader(private val context: Context, private val packs: IconPacks, private val settings: com.iconforge.app.data.Settings) {
     private val pm = context.packageManager
     private val cache = object : LruCache<String, Bitmap>(
         (Runtime.getRuntime().maxMemory() / 1024 / 6).toInt().coerceAtLeast(8 * 1024),
@@ -77,7 +77,8 @@ class IconLoader(private val context: Context, private val packs: IconPacks) {
         override fun sizeOf(key: String, value: Bitmap) = value.allocationByteCount / 1024
     }
 
-    private fun cacheKey(src: IconSrc, sizePx: Int, shape: IconShape) = "${src.key}@$sizePx#${shape.name}"
+    private fun cacheKey(src: IconSrc, sizePx: Int, shape: IconShape) =
+        "${src.key}@$sizePx#${shape.name}${if (settings.shapeAllIcons.value) "+all" else ""}"
 
     fun peek(src: IconSrc, sizePx: Int, shape: IconShape = IconShape.DEFAULT): Bitmap? = cache.get(cacheKey(src, sizePx, shape))
 
@@ -101,7 +102,10 @@ class IconLoader(private val context: Context, private val packs: IconPacks) {
         is IconSrc.Adjusted -> renderAdjusted(src, sizePx, shape)
         else -> drawable(src)?.let { d ->
             if (shape != IconShape.DEFAULT && d is AdaptiveIconDrawable) renderAdaptive(d, sizePx, shape)
-            else d.toBitmap(sizePx, sizePx, Bitmap.Config.ARGB_8888)
+            else d.toBitmap(sizePx, sizePx, Bitmap.Config.ARGB_8888).let {
+                // "Apply the shape to every icon": cut ordinary (non-adaptive) icons too.
+                if (settings.shapeAllIcons.value && shape != IconShape.DEFAULT) clipTo(it, shape) else it
+            }
         }
     }
 

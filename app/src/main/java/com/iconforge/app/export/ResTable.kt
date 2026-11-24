@@ -296,9 +296,13 @@ class LiveCopier(private val src: SourceRes, packageName: String) {
     private val fileTypes = setOf("drawable", "mipmap", "color", "xml", "anim", "animator", "interpolator")
 
     /** Copies [drawable] into [into] under the appfilter name [alias]. False = not XML / not copyable. */
-    fun collect(drawable: String, alias: String, into: LiveBundle): Boolean {
+    fun collect(drawable: String, alias: String, into: LiveBundle, allowAdaptive: Boolean = true): Boolean {
         val id = src.id("drawable", drawable) ?: src.id("mipmap", drawable) ?: return false
-        if (src.values[id].orEmpty().none { it.str?.endsWith(".xml") == true }) return false
+        val xmlFiles = src.values[id].orEmpty().mapNotNull { v -> v.str?.takeIf { it.endsWith(".xml") } }
+        if (xmlFiles.isEmpty()) return false
+        // The launcher picks the shape of adaptive icons itself; with a fixed theme shape they
+        // must be drawn as pictures in that shape instead.
+        if (!allowAdaptive && xmlFiles.any { f -> src.file(f)?.let { rootTag(it) } == "adaptive-icon" }) return false
         val tmp = LiveBundle()
         return try {
             val key = copy(id, tmp, into)
@@ -310,6 +314,24 @@ class LiveCopier(private val src: SourceRes, packageName: String) {
         } catch (_: RuntimeException) {
             false
         }
+    }
+
+    /** Name of the first element of compiled XML (e.g. "adaptive-icon", "vector"). */
+    private fun rootTag(bytes: ByteArray): String? {
+        val le = Le(bytes)
+        if (bytes.size < 8 || le.u16(0) != 0x0003) return null
+        var strings: List<String> = emptyList()
+        var c = le.u16(2)
+        while (c + 8 <= bytes.size) {
+            val type = le.u16(c); val size = le.u32(c + 4)
+            if (size <= 0) break
+            when (type) {
+                0x0001 -> strings = readStringPool(le, c)
+                0x0102 -> return strings.getOrNull(le.u32(c + 20))
+            }
+            c += size
+        }
+        return null
     }
 
     private fun keyOf(id: Int): LiveKey {

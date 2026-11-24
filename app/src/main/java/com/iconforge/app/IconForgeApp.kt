@@ -54,7 +54,7 @@ class IconForgeApp : Application() {
         settings = Settings(this)
         packs = IconPacks(this)
         scanner = AppScanner(this)
-        icons = IconLoader(this, packs)
+        icons = IconLoader(this, packs, settings)
         repo = ThemeRepository(this, db, packs, scanner, settings)
         exporter = PackExporter(this, db, packs, icons, repo, settings)
 

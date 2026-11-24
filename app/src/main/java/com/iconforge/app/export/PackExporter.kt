@@ -175,7 +175,7 @@ class PackExporter(
             liveBySource[k]?.let { return it }
             val c = copier(pack) ?: return null
             val name = unique(base)
-            return if (c.collect(drawable, name, bundle)) name.also { liveBySource[k] = it } else { names.remove(name); null }
+            return if (c.collect(drawable, name, bundle, allowAdaptive = shape == com.iconforge.app.core.IconShape.DEFAULT)) name.also { liveBySource[k] = it } else { names.remove(name); null }
         }
 
         maps.forEachIndexed { i, m ->
@@ -188,7 +188,9 @@ class PackExporter(
                 Source.CUSTOM -> "custom_" + ApkBuilder.resName(m.packageName)
                 else -> "app_" + ApkBuilder.resName(m.packageName)
             }
-            val canLive = forApk && live && m.source == Source.PACK && m.scale == 1f && m.bgColor == null
+            // Every icon cut to a shape can't stay live (the shape is drawn into the picture).
+            val canLive = forApk && live && m.source == Source.PACK && m.scale == 1f && m.bgColor == null &&
+                !(settings.shapeAllIcons.value && shape != com.iconforge.app.core.IconShape.DEFAULT)
             val res = (if (canLive) addLive(m, base) else null) ?: addIcon(src, base) ?: return@forEachIndexed
             if (previews.size < 4) previews += src
             val cls = m.componentKey.substringAfter('/')
