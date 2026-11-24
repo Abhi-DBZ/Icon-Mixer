@@ -5,6 +5,11 @@ import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.background
+import kotlinx.coroutines.launch
+import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.foundation.gestures.detectVerticalDragGestures
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Box
@@ -88,6 +93,9 @@ fun PickerScreen(main: MainViewModel, nav: NavHostController, themeId: Long, key
     val suggestions by vm.suggestions.collectAsState()
     val exact by vm.exactMatches.collectAsState()
     val neighbours by vm.neighbours.collectAsState()
+    val category by vm.category.collectAsState()
+    val loadedPack by vm.loaded.collectAsState()
+    val scope = androidx.compose.runtime.rememberCoroutineScope()
     val pickerTheme by vm.theme.collectAsState()
     val shape = IconShape.of(pickerTheme?.iconShape)
     var preview by remember { mutableStateOf<Candidate?>(null) }
@@ -159,45 +167,82 @@ fun PickerScreen(main: MainViewModel, nav: NavHostController, themeId: Long, key
             Row(Modifier.horizontalScroll(rememberScrollState()).padding(horizontal = 16.dp, vertical = 2.dp),
                 horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 packs.forEach { p ->
-                    FilterChip(selected == p.packageName, { vm.selectedPack.value = p.packageName }, { Text(p.label) })
+                    FilterChip(selected == p.packageName, { vm.selectedPack.value = p.packageName; vm.category.value = null }, { Text(p.label) })
                 }
             }
             SearchField(
                 query, { vm.query.value = it }, "Search icons in $packLabel",
                 Modifier.padding(horizontal = 16.dp, vertical = 4.dp).onFocusChanged { searchFocused = it.hasFocus },
             )
+            // The pack's own groups (e.g. "System", "Google"), when it defines them.
+            val cats = loadedPack?.categories?.keys?.toList().orEmpty()
+            if (cats.isNotEmpty()) {
+                Row(Modifier.horizontalScroll(rememberScrollState()).padding(horizontal = 16.dp),
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    FilterChip(category == null, { vm.category.value = null }, { Text("All") })
+                    cats.forEach { c -> FilterChip(category == c, { vm.category.value = if (category == c) null else c }, { Text(c) }) }
+                }
+            }
 
-            LazyVerticalGrid(
-                state = gridState,
-                columns = GridCells.Adaptive(68.dp),
-                modifier = Modifier.weight(1f).fillMaxWidth(),
-                contentPadding = PaddingValues(start = 12.dp, end = 12.dp, bottom = 24.dp),
-            ) {
-                // Icons other packs have for exactly this app
-                if (exact.isNotEmpty() && !searching) {
-                    item(span = { GridItemSpan(maxLineSpan) }) { SectionTitle("Made for this app") }
-                    items(exact, key = { "x:${it.pack.packageName}:${it.drawable}" }) { m ->
-                        IconCell(IconSrc.Pack(m.pack.packageName, m.drawable), m.pack.label) {
-                            preview = Candidate(m.pack.packageName, m.pack.label, m.drawable)
+            val pack = selected
+            val showExact = exact.isNotEmpty() && !searching
+            val showSuggest = pack != null && query.isBlank() && suggestions.isNotEmpty()
+            // A–Z sections (only when browsing; search results stay one list).
+            val sections = remember(icons, query) {
+                if (query.isNotBlank()) emptyList()
+                else icons.groupBy { com.iconforge.app.core.IconNames.pretty(it).firstOrNull()?.uppercaseChar()?.takeIf { c -> c.isLetter() } ?: '#' }
+                    .toList().sortedBy { (k, _) -> if (k == '#') '~' else k }
+            }
+            val headerIndex = remember(sections, showExact, showSuggest, exact.size, suggestions.size) {
+                var i = (if (showExact) 1 + exact.size else 0) + (if (showSuggest) 1 + suggestions.size else 0) + 1
+                sections.associate { (letter, list) -> letter to i.also { i += 1 + list.size } }
+            }
+
+            Box(Modifier.weight(1f).fillMaxWidth()) {
+                LazyVerticalGrid(
+                    state = gridState,
+                    columns = GridCells.Adaptive(68.dp),
+                    modifier = Modifier.fillMaxSize(),
+                    contentPadding = PaddingValues(start = 12.dp, end = if (sections.size > 1) 28.dp else 12.dp, bottom = 24.dp),
+                ) {
+                    // Icons other packs have for exactly this app
+                    if (showExact) {
+                        item(span = { GridItemSpan(maxLineSpan) }) { SectionTitle("Made for this app") }
+                        items(exact, key = { "x:${it.pack.packageName}:${it.drawable}" }) { m ->
+                            IconCell(IconSrc.Pack(m.pack.packageName, m.drawable), m.pack.label) {
+                                preview = Candidate(m.pack.packageName, m.pack.label, m.drawable)
+                            }
+                        }
+                    }
+                    if (showSuggest && pack != null) {
+                        item(span = { GridItemSpan(maxLineSpan) }) { SectionTitle("Suggested") }
+                        items(suggestions, key = { "s:$pack:$it" }) { d ->
+                            IconCell(IconSrc.Pack(pack, d), com.iconforge.app.core.IconNames.pretty(d)) { preview = Candidate(pack, packLabel, d) }
+                        }
+                    }
+                    if (pack != null) {
+                        item(span = { GridItemSpan(maxLineSpan) }) {
+                            SectionTitle(if (query.isBlank()) "All icons · ${icons.size}" else "${icons.size} results")
+                        }
+                        if (sections.isEmpty()) {
+                            items(icons, key = { "a:$pack:$it" }) { d ->
+                                IconCell(IconSrc.Pack(pack, d), com.iconforge.app.core.IconNames.pretty(d)) { preview = Candidate(pack, packLabel, d) }
+                            }
+                        } else sections.forEach { (letter, list) ->
+                            item(span = { GridItemSpan(maxLineSpan) }, key = "h:$pack:$letter") {
+                                Text(letter.toString(), style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.primary,
+                                    modifier = Modifier.padding(start = 6.dp, top = 10.dp, bottom = 2.dp))
+                            }
+                            items(list, key = { "a:$pack:$it" }) { d ->
+                                IconCell(IconSrc.Pack(pack, d), com.iconforge.app.core.IconNames.pretty(d)) { preview = Candidate(pack, packLabel, d) }
+                            }
                         }
                     }
                 }
-
-                val pack = selected
-                if (pack != null && query.isBlank() && suggestions.isNotEmpty()) {
-                    item(span = { GridItemSpan(maxLineSpan) }) { SectionTitle("Suggested") }
-                    items(suggestions, key = { "s:$pack:$it" }) { d ->
-                        IconCell(IconSrc.Pack(pack, d), d) { preview = Candidate(pack, packLabel, d) }
-                    }
-                }
-                if (pack != null) {
-                    item(span = { GridItemSpan(maxLineSpan) }) {
-                        SectionTitle(if (query.isBlank()) "All icons · ${icons.size}" else "${icons.size} results")
-                    }
-                    items(icons, key = { "a:$pack:$it" }) { d ->
-                        IconCell(IconSrc.Pack(pack, d), d) { preview = Candidate(pack, packLabel, d) }
-                    }
-                }
+                if (sections.size > 1) LetterRail(
+                    letters = sections.map { it.first },
+                    modifier = Modifier.align(Alignment.CenterEnd).padding(end = 2.dp),
+                ) { letter -> headerIndex[letter]?.let { idx -> scope.launch { gridState.scrollToItem(idx) } } }
             }
         }
       }
@@ -322,6 +367,33 @@ private fun AdjustSheet(base: IconSrc?, scale0: Float, bg0: Int?, shape: IconSha
                 Button(onClick = { onApply(scale, bg) }, modifier = Modifier.weight(1f)) { Text("Apply") }
             }
             Gap(h = 12.dp)
+        }
+    }
+}
+
+/** A–Z index on the right edge: tap or drag to jump to a letter. */
+@Composable
+private fun LetterRail(letters: List<Char>, modifier: Modifier = Modifier, onLetter: (Char) -> Unit) {
+    var height by remember { mutableStateOf(1) }
+    var last by remember { mutableStateOf<Char?>(null) }
+    fun pick(y: Float) {
+        val i = (y / height * letters.size).toInt().coerceIn(0, letters.size - 1)
+        val l = letters[i]
+        if (l != last) { last = l; onLetter(l) }
+    }
+    Column(
+        modifier
+            .onSizeChanged { height = it.height.coerceAtLeast(1) }
+            .pointerInput(letters) { detectTapGestures { pick(it.y); last = null } }
+            .pointerInput(letters) {
+                detectVerticalDragGestures(onDragStart = { pick(it.y) }, onDragEnd = { last = null }) { change, _ -> pick(change.position.y) }
+            }
+            .padding(vertical = 4.dp, horizontal = 4.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+    ) {
+        letters.forEach { l ->
+            Text(l.toString(), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(vertical = 1.dp))
         }
     }
 }

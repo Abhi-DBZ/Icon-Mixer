@@ -67,6 +67,8 @@ class LoadedPack(
     val scale: Float = 1f,
     /** "pkg/cls" → calendar prefix (icons <prefix>1 … <prefix>31). */
     val calendars: Map<String, String> = emptyMap(),
+    /** Pack-defined groups (drawable.xml <category>), names already de-duplicated. */
+    val categories: Map<String, List<String>> = emptyMap(),
 ) {
     val hasStyle get() = backs.isNotEmpty() || mask != null || upon != null
 
@@ -168,17 +170,41 @@ class IconPacks(private val context: Context) {
                 order += drawable
             }
         }
+        val cats = LinkedHashMap<String, MutableList<String>>()
+        var cat: String? = null
         readXml(res, pkg, "drawable") { p ->
-            if (p.name == "item") p.getAttributeValue(null, "drawable")?.trim()?.ifEmpty { null }?.let { order += it }
+            when (p.name) {
+                "category" -> cat = p.getAttributeValue(null, "title")?.trim()?.ifEmpty { null }
+                "item" -> p.getAttributeValue(null, "drawable")?.trim()?.ifEmpty { null }?.let { d ->
+                    order += d
+                    cat?.let { c -> cats.getOrPut(c) { ArrayList() } += d }
+                }
+            }
         }
 
         val pack = LoadedPack(pkg, label, findAuthor(res, pkg), version, res, byComponent, byPackage, emptyList())
-        val icons = order.filter { pack.drawableId(it) != 0 }
+        // Many packs list one picture under several names (short + full package name).
+        // Group names by the file they resolve to and keep the most readable one.
+        val tv = android.util.TypedValue()
+        val keepFor = LinkedHashMap<String, String>()          // file → shown name
+        val canonical = HashMap<String, String>()              // any name → shown name
+        for (n in order) {
+            val id = pack.drawableId(n)
+            if (id == 0) continue
+            val file = runCatching { res.getValue(id, tv, true); tv.string?.toString() }.getOrNull() ?: "id:$id"
+            val cur = keepFor[file]
+            if (cur == null || IconNames.better(n, cur)) keepFor[file] = n
+            canonical[n] = file
+        }
+        val icons = keepFor.values.toList()
+        val categories = cats.mapValues { (_, names) -> names.mapNotNull { canonical[it]?.let(keepFor::get) }.distinct() }
+            .filterValues { it.isNotEmpty() }
         fun ok(n: String?) = n?.takeIf { pack.drawableId(it) != 0 }
         return LoadedPack(
             pkg, label, pack.author, version, res, byComponent, byPackage, icons,
             backs = backs.mapNotNull(::ok), mask = ok(mask), upon = ok(upon), scale = scale,
             calendars = calendars.filterValues { pack.drawableId(it + "1") != 0 },
+            categories = if (categories.size > 1) categories else emptyMap(),
         )
     }
 
@@ -227,6 +253,30 @@ class IconPacks(private val context: Context) {
 
 private inline fun <T> android.content.res.XmlResourceParser.useParser(block: (android.content.res.XmlResourceParser) -> T): T =
     try { block(this) } finally { close() }
+
+/** Readable names for pack drawables. */
+object IconNames {
+    private val prefixes = setOf("com", "org", "net", "in", "io", "app", "co", "de", "me", "tv", "ru", "cn", "jp", "br", "uk", "android")
+
+    /** Looks like an Android package written as a resource name, e.g. com_whatsapp_w4b. */
+    fun packageLike(n: String) = n.substringBefore('_') in prefixes && n.count { it == '_' } >= 1
+
+    /** "com_aapdfhd_pdf_reader" → "aapdfhd pdf reader"; "pdf_extra" → "pdf extra". */
+    fun pretty(n: String): String {
+        val parts = n.split('_').filter { it.isNotEmpty() }
+        val trimmed = if (packageLike(n)) parts.dropWhile { it in prefixes }.ifEmpty { parts } else parts
+        return trimmed.joinToString(" ")
+    }
+
+    /** Prefer the short, human name over the package-style alias of the same picture. */
+    fun better(a: String, b: String): Boolean {
+        val pa = packageLike(a); val pb = packageLike(b)
+        return if (pa != pb) !pa else a.length < b.length
+    }
+
+    /** For matching: lower case, no separators. */
+    fun squash(s: String) = s.lowercase().filter { it.isLetterOrDigit() }
+}
 
 /** Name-similarity suggestions: which icons in a pack probably fit an app. */
 object Suggest {

@@ -237,13 +237,19 @@ class PickerViewModel(application: Application, val themeId: Long, val keys: Lis
 
     val selectedPack = MutableStateFlow<String?>(null)
     val query = MutableStateFlow("")
+    /** Pack category filter (null = all). */
+    val category = MutableStateFlow<String?>(null)
 
     val loaded: StateFlow<LoadedPack?> = selectedPack.mapLatest { p -> p?.let { a.packs.load(it) } }.state(this, null)
 
-    val icons: StateFlow<List<String>> = combine(loaded, query) { p, q ->
-        val all = p?.icons ?: emptyList()
-        val qq = q.trim().lowercase().replace(' ', '_')
-        if (qq.isEmpty()) all else all.filter { it.contains(qq) }
+    /** Icons of the selected pack: category → search → A–Z by readable name. */
+    val icons: StateFlow<List<String>> = combine(loaded, query, category) { p, q, cat ->
+        val base = p?.let { pk -> cat?.let { pk.categories[it] } ?: pk.icons } ?: emptyList()
+        val qq = com.iconforge.app.core.IconNames.squash(q)
+        val hits = if (qq.isEmpty()) base else base.filter {
+            com.iconforge.app.core.IconNames.squash(it).contains(qq) || com.iconforge.app.core.IconNames.squash(com.iconforge.app.core.IconNames.pretty(it)).contains(qq)
+        }
+        hits.sortedBy { com.iconforge.app.core.IconNames.pretty(it).lowercase() }
     }.state(this, emptyList())
 
     /** Name-based guesses in the selected pack. */
