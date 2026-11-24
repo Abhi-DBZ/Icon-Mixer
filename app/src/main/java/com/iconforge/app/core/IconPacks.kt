@@ -24,7 +24,6 @@ class AppScanner(private val context: Context) {
         val la = context.getSystemService(LauncherApps::class.java)
         val now = System.currentTimeMillis()
         return la.getActivityList(null, Process.myUserHandle())
-            .filter { it.componentName.packageName != context.packageName }
             .map {
                 val cn = it.componentName
                 val flags = it.applicationInfo.flags

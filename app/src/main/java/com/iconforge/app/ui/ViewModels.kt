@@ -64,14 +64,18 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     private val _busy = MutableStateFlow<String?>(null)
     val busy: StateFlow<String?> = _busy
-    private val _messages = MutableSharedFlow<String>(extraBufferCapacity = 8)
-    val messages: SharedFlow<String> = _messages
+    /** Snackbar message, optionally with one action (e.g. Undo). */
+    data class UiMsg(val text: String, val action: String? = null, val onAction: (() -> Unit)? = null)
+
+    private val _messages = MutableSharedFlow<UiMsg>(extraBufferCapacity = 8)
+    val messages: SharedFlow<UiMsg> = _messages
     private val _scanned = MutableStateFlow(false)
     val scanned: StateFlow<Boolean> = _scanned
 
     init { refresh(first = true) }
 
-    fun say(msg: String) { _messages.tryEmit(msg) }
+    fun say(msg: String) { _messages.tryEmit(UiMsg(msg)) }
+    fun say(msg: String, action: String, onAction: () -> Unit) { _messages.tryEmit(UiMsg(msg, action, onAction)) }
 
     private fun work(label: String?, block: suspend () -> Unit) = viewModelScope.launch {
         if (label != null) _busy.value = label
@@ -123,9 +127,15 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     fun smartFill(themeId: Long, guesses: Boolean, generate: Boolean, otherPacks: Boolean, onDone: (Int) -> Unit = {}) = work("Filling icons…") {
         val r = repo.smartFill(themeId, guesses, generate, otherPacks)
         val c = repo.coverage(themeId)
-        say(if (r.total == 0) "Nothing more to fill" else
-            "${r.matched} matched · ${r.guessed} guessed · ${r.generated} generated — coverage ${c.percent}%")
+        if (r.total == 0) say("Nothing more to fill")
+        else say("${r.matched} matched · ${r.guessed} guessed · ${r.generated} generated — coverage ${c.percent}%", "Undo") { undo() }
         onDone(r.guessed + r.generated)
+    }
+
+    /** Lasting "go back": removes everything Auto-fill added that wasn't kept or changed. */
+    fun removeAutoFilled(themeId: Long) = work(null) {
+        val n = repo.removeAutoFilled(themeId)
+        if (n == 0) say("No auto-filled icons to remove") else say("Removed $n auto-filled icons", "Undo") { undo() }
     }
 
     fun acceptAll(themeId: Long) = work(null) { repo.acceptAll(themeId); say("All auto-filled icons kept") }

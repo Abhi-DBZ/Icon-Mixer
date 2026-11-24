@@ -138,6 +138,7 @@ fun EditorScreen(main: MainViewModel, nav: NavHostController, themeId: Long, ini
                                 DropdownMenuItem(text = { Text("Auto-fill missing…") }, onClick = { menu = false; autoFill = true })
                                 if ((counts[EditorViewModel.Filter.REVIEW] ?: 0) > 0) DropdownMenuItem(
                                     text = { Text("Keep all auto-filled") }, onClick = { menu = false; main.acceptAll(themeId) })
+                                DropdownMenuItem(text = { Text("Remove auto-filled icons") }, onClick = { menu = false; main.removeAutoFilled(themeId) })
                                 DropdownMenuItem(text = { Text("Preview on home screen") }, onClick = { menu = false; nav.navigate(Routes.preview(themeId)) })
                                 DropdownMenuItem(text = { Text("Fill missing from a pack…") }, onClick = { menu = false; packChooser = PackAction.FILL })
                                 DropdownMenuItem(text = { Text("Apply a pack to all…") }, onClick = { menu = false; packChooser = PackAction.APPLY })
@@ -183,9 +184,10 @@ fun EditorScreen(main: MainViewModel, nav: NavHostController, themeId: Long, ini
             }
             if (filter == EditorViewModel.Filter.REVIEW && rows.isNotEmpty()) {
                 Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp), verticalAlignment = Alignment.CenterVertically) {
-                    Text("Auto-filled icons. Tap one to change it, or keep them all.",
+                    Text("Auto-filled icons. Tap one to change it, or keep or remove them all.",
                         style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
                         modifier = Modifier.weight(1f))
+                    TextButton(onClick = { main.removeAutoFilled(themeId) }) { Text("Remove all") }
                     TextButton(onClick = { main.acceptAll(themeId) }) { Text("Keep all") }
                 }
             }

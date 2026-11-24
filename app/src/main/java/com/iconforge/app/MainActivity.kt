@@ -103,7 +103,15 @@ private fun Root(launchIntent: Intent?, consumed: () -> Unit) {
     LaunchedEffect(Unit) {
         if (Build.VERSION.SDK_INT >= 33) notifPermission.launch(Manifest.permission.POST_NOTIFICATIONS)
     }
-    LaunchedEffect(Unit) { vm.messages.collect { snackbar.showSnackbar(it) } }
+    LaunchedEffect(Unit) {
+        vm.messages.collect { m ->
+            val r = snackbar.showSnackbar(
+                m.text, actionLabel = m.action, withDismissAction = m.action != null,
+                duration = if (m.action != null) androidx.compose.material3.SnackbarDuration.Long else androidx.compose.material3.SnackbarDuration.Short,
+            )
+            if (r == androidx.compose.material3.SnackbarResult.ActionPerformed) m.onAction?.invoke()
+        }
+    }
     LaunchedEffect(Unit) { InstallEvents.events.collect { snackbar.showSnackbar(it) } }
     // Packs or apps may have been installed while we were away.
     var first by remember { mutableStateOf(true) }

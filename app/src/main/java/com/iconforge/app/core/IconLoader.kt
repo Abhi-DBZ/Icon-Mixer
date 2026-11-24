@@ -5,6 +5,7 @@ import android.content.ComponentName
 import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
+import android.os.Build
 import android.graphics.Canvas
 import android.graphics.Paint
 import android.graphics.Path
@@ -107,15 +108,100 @@ class IconLoader(private val context: Context, private val packs: IconPacks) {
     private fun packBitmap(pack: String, name: String?, s: Int): Bitmap? =
         name?.let { drawable(IconSrc.Pack(pack, it))?.toBitmap(s, s, Bitmap.Config.ARGB_8888) }
 
+    private val looks = java.util.concurrent.ConcurrentHashMap<String, java.util.Optional<PackLook>>()
+
+    /** Two-tone look of a pack (plate + glyph colours, shape), learned from its icons; null if it has none. */
+    fun packLook(pack: LoadedPack): PackLook? = looks.getOrPut("${pack.packageName}@${pack.versionCode}") {
+        val s = 64
+        val samples = pack.byComponent.values.distinct().take(40).mapNotNull { name ->
+            drawable(IconSrc.Pack(pack.packageName, name))?.let { d ->
+                runCatching {
+                    val b = d.toBitmap(s, s, Bitmap.Config.ARGB_8888)
+                    IntArray(s * s).also { b.getPixels(it, 0, s, 0, 0, s, s) }
+                }.getOrNull()
+            }
+        }
+        java.util.Optional.ofNullable(PackLookAnalyzer.analyze(samples, s))
+    }.orElse(null)
+
     /**
-     * How launchers theme apps an icon pack doesn't cover: the app icon scaled down,
-     * cut by the mask, drawn over a back plate, with the overlay on top. Packs without
-     * a style kit just get the app icon in the theme's shape.
+     * The app's single-colour symbol (the layer Android 13 uses for themed icons), else its
+     * adaptive foreground when that is a symbol and not a full picture. Only alpha is used.
+     */
+    private fun glyphBitmap(app: IconSrc.App, s: Int): Bitmap? {
+        val d = drawable(app) ?: return null
+        if (d is AdaptiveIconDrawable) {
+            val mono = if (Build.VERSION.SDK_INT >= 33) d.monochrome else null
+            val layer = mono ?: d.foreground
+            if (layer != null) {
+                val out = Bitmap.createBitmap(s, s, Bitmap.Config.ARGB_8888)
+                val inset = s / 4
+                layer.setBounds(-inset, -inset, s + inset, s + inset)
+                layer.draw(Canvas(out))
+                if (mono != null) return out
+                // A foreground covering most of the icon is a picture, not a symbol.
+                val px = IntArray(s * s).also { out.getPixels(it, 0, s, 0, 0, s, s) }
+                if (px.count { (it ushr 24) > 128 } <= s * s * 0.45) return out
+            }
+        }
+        // No symbol layer: cut the logo out of the normal icon (what stands out from its background).
+        val full = render(app, s, IconShape.SQUARE) ?: return null
+        val px = IntArray(s * s).also { full.getPixels(it, 0, s, 0, 0, s, s) }
+        val mask = PackLookAnalyzer.logoMask(px, s) ?: return null
+        val alpha = IntArray(s * s) { if (mask[it].toInt() != 0) 0xFF000000.toInt() else 0 }
+        return Bitmap.createBitmap(alpha, s, s, Bitmap.Config.ARGB_8888)
+    }
+
+    /** Keeps only the part of [b] inside [shape]. */
+    private fun clipTo(b: Bitmap, shape: IconShape): Bitmap {
+        if (shape == IconShape.DEFAULT) return b
+        val s = b.width
+        val out = Bitmap.createBitmap(s, s, Bitmap.Config.ARGB_8888)
+        val c = Canvas(out)
+        val p = Paint(Paint.ANTI_ALIAS_FLAG)
+        c.drawPath(shape.path(s.toFloat()), p)
+        p.xfermode = PorterDuffXfermode(PorterDuff.Mode.SRC_IN)
+        c.drawBitmap(b, 0f, 0f, p)
+        return out
+    }
+
+    /**
+     * An icon for an app the pack doesn't cover, made to look like the pack:
+     *  - two-tone packs (e.g. a white glyph on a dark circle): a plate in the pack's colour and
+     *    shape (or the theme's shape) with the app's own symbol in the pack's glyph colour;
+     *  - packs with a style kit: the app icon scaled, masked and placed on the pack's back plate;
+     *  - otherwise the app icon in the theme's shape.
      */
     private fun renderGenerated(src: IconSrc.Generated, s: Int, shape: IconShape): Bitmap? {
         val pack = kotlinx.coroutines.runBlocking { packs.load(src.pack) }
         val appSrc = IconSrc.App(src.packageName, src.activityName)
+        val look = pack?.let { packLook(it) }
+        if (look != null) {
+            val plateShape = if (shape != IconShape.DEFAULT) shape else look.shape
+            // A monochrome layer's symbol spans ~61% of the icon at normal size.
+            val gs = (s * look.glyphSize / 0.61f).toInt().coerceIn(s / 3, (s * 1.3f).toInt())
+            val glyph = glyphBitmap(appSrc, gs)
+            if (glyph != null) {
+                val out = Bitmap.createBitmap(s, s, Bitmap.Config.ARGB_8888)
+                val c = Canvas(out)
+                val plateSide = if (shape != IconShape.DEFAULT) s.toFloat() else s * look.plateSize
+                val inset = (s - plateSide) / 2f
+                c.save(); c.translate(inset, inset)
+                c.drawPath(plateShape.path(plateSide), Paint(Paint.ANTI_ALIAS_FLAG).apply { color = look.plate })
+                c.restore()
+                val gp = Paint(Paint.ANTI_ALIAS_FLAG or Paint.FILTER_BITMAP_FLAG).apply {
+                    colorFilter = android.graphics.PorterDuffColorFilter(look.glyph, PorterDuff.Mode.SRC_IN)
+                }
+                c.drawBitmap(glyph, (s - gs) / 2f, (s - gs) / 2f, gp)
+                return out
+            }
+        }
         if (pack == null || !pack.hasStyle) return render(appSrc, s, if (shape == IconShape.DEFAULT) IconShape.SQUIRCLE else shape)
+        return renderStyleKit(src, pack, appSrc, s, shape)?.let { clipTo(it, shape) }
+    }
+
+    /** Launcher-style fallback: app icon scaled, cut by the mask, on the back plate, overlay on top. */
+    private fun renderStyleKit(src: IconSrc.Generated, pack: LoadedPack, appSrc: IconSrc.App, s: Int, shape: IconShape): Bitmap? {
         val scale = pack.scale
         val inner = (s * scale).toInt().coerceAtLeast(8)
         val icon = render(appSrc, inner, shape) ?: return null

@@ -267,6 +267,17 @@ class ThemeRepository(
         db.mappings().put(db.mappings().get(themeId, keys).map { it.copy(isGuess = false) })
     }
 
+    /** Icons Auto-fill added and nobody kept or chose (guesses + generated). */
+    suspend fun autoFilledKeys(themeId: Long): List<String> = db.mappings().forTheme(themeId)
+        .filter { it.isGuess || (it.source == Source.GENERATED && !it.isManual) }.map { it.componentKey }
+
+    /** Takes back Auto-fill: those apps become "missing" again. Undoable. */
+    suspend fun removeAutoFilled(themeId: Long): Int {
+        val keys = autoFilledKeys(themeId)
+        if (keys.isNotEmpty()) change(themeId, keys, "Removed ${keys.size} auto-filled icon(s)") { db.mappings().delete(themeId, keys) }
+        return keys.size
+    }
+
     suspend fun acceptAll(themeId: Long) {
         val keys = db.mappings().forTheme(themeId).filter { it.isGuess }.map { it.componentKey }
         if (keys.isNotEmpty()) accept(themeId, keys)
