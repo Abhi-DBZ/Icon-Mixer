@@ -22,6 +22,8 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Box
+import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
@@ -223,15 +225,7 @@ fun ExportScreen(nav: NavHostController, themeId: Long) {
                         SwitchRow("Shape every icon", "Also icons that aren't adaptive", all) { vm.settings.setShapeAllIcons(it) }
                     }
                     OptionLabel("Icon size")
-                    val sizes = listOf(128 to "S · 128", 192 to "M · 192", 256 to "L · 256")
-                    SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth().padding(horizontal = 16.dp)) {
-                        sizes.forEachIndexed { i, (px, label) ->
-                            SegmentedButton(
-                                selected = size == px, onClick = { vm.settings.setExportSize(px) },
-                                shape = SegmentedButtonDefaults.itemShape(i, sizes.size),
-                            ) { Text(label, maxLines = 1, softWrap = false) }
-                        }
-                    }
+                    SizePicker(t.id, IconShape.of(t.iconShape), size) { vm.settings.setExportSize(it) }
                     Gap(h = 4.dp)
                     val live by vm.settings.liveColours.collectAsState()
                     SwitchRow(
@@ -280,6 +274,62 @@ fun ExportScreen(nav: NavHostController, themeId: Long) {
             }
         }
     }
+}
+
+/**
+ * Export size as three preview tiles: one icon of the theme drawn at 128 / 192 / 256 px and
+ * shown at the same (enlarged) size, so the difference in sharpness is visible, with the
+ * PNG size per icon. The size on the home screen is the launcher's choice, not this.
+ */
+@Composable
+private fun SizePicker(themeId: Long, shape: IconShape, selected: Int, onPick: (Int) -> Unit) {
+    val a = LocalContext.current.app
+    val sizes = listOf(128 to "S", 192 to "M", 256 to "L")
+    val renders by androidx.compose.runtime.produceState<List<Pair<androidx.compose.ui.graphics.ImageBitmap, Int>>?>(null, themeId, shape) {
+        value = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Default) {
+            val maps = a.db.mappings().forTheme(themeId)
+            val m = maps.firstOrNull { it.source == com.iconforge.app.data.Source.PACK } ?: maps.firstOrNull()
+            val app = m?.let { mm -> a.db.apps().all().firstOrNull { it.componentKey == mm.componentKey } }
+            val src = com.iconforge.app.core.IconSrc.of(m, app) ?: com.iconforge.app.core.IconSrc.App(a.packageName, "")
+            sizes.map { (px, _) ->
+                val b = a.icons.renderForExport(src, px, shape) ?: return@withContext null
+                val bytes = java.io.ByteArrayOutputStream().also { b.compress(android.graphics.Bitmap.CompressFormat.PNG, 100, it) }.size()
+                b.asImageBitmap() to bytes
+            }
+        }
+    }
+    Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        sizes.forEachIndexed { i, (px, letter) ->
+            val on = px == selected
+            androidx.compose.material3.Surface(
+                onClick = { onPick(px) },
+                shape = androidx.compose.foundation.shape.RoundedCornerShape(16.dp),
+                color = if (on) MaterialTheme.colorScheme.secondaryContainer else MaterialTheme.colorScheme.surface,
+                border = androidx.compose.foundation.BorderStroke(if (on) 2.dp else 1.dp,
+                    if (on) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outlineVariant),
+                modifier = Modifier.weight(1f),
+            ) {
+                Column(Modifier.padding(vertical = 8.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                    val r = renders?.getOrNull(i)
+                    Box(Modifier.size(76.dp), contentAlignment = Alignment.Center) {
+                        if (r != null) androidx.compose.foundation.Image(r.first, "$letter preview", Modifier.size(76.dp),
+                            filterQuality = androidx.compose.ui.graphics.FilterQuality.Low)
+                        else if (renders == null) androidx.compose.material3.CircularProgressIndicator(Modifier.size(20.dp), strokeWidth = 2.dp)
+                    }
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        if (on) { Icon(Icons.Outlined.Check, null, Modifier.size(16.dp), tint = MaterialTheme.colorScheme.primary); Gap(w = 2.dp) }
+                        Text("$letter · $px", style = MaterialTheme.typography.labelLarge,
+                            fontWeight = if (on) androidx.compose.ui.text.font.FontWeight.Bold else null)
+                    }
+                    Text(r?.let { "≈ ${((it.second + 512) / 1024).coerceAtLeast(1)} KB / icon" } ?: " ",
+                        style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+            }
+        }
+    }
+    Text("Shown enlarged. On the home screen all three are the same size; bigger is sharper but makes a larger pack.",
+        style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
+        modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 6.dp))
 }
 
 @Composable

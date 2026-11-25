@@ -34,6 +34,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material.icons.outlined.MoreVert
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.DropdownMenu
+import androidx.compose.material.icons.outlined.Delete
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.ListItem
@@ -198,6 +199,7 @@ fun PacksScreen(vm: MainViewModel, nav: NavHostController) {
                     onFill = { theme?.let { vm.fillMissing(it.id, p.packageName) } },
                     onApply = { theme?.let { vm.applyPack(it.id, p.packageName) } },
                     onMakeBase = { theme?.let { vm.setBasePack(it.id, p.packageName) } },
+                    onUninstall = { vm.uninstall(p.packageName) },
                 )
             }
         }
@@ -214,6 +216,7 @@ fun PacksScreen(vm: MainViewModel, nav: NavHostController) {
 private fun PackCard(
     p: IconPackEntity, hasTheme: Boolean, isBase: Boolean,
     onNewTheme: () -> Unit, onFill: () -> Unit, onApply: () -> Unit, onMakeBase: () -> Unit,
+    onUninstall: () -> Unit,
 ) {
     val ctx = LocalContext.current
     val a = ctx.app
@@ -252,6 +255,13 @@ private fun PackCard(
                             DropdownMenuItem(text = { Text("Apply to the whole theme") }, onClick = { menu = false; onApply() })
                             if (!isBase) DropdownMenuItem(text = { Text("Make it the theme's pack") }, onClick = { menu = false; onMakeBase() })
                         }
+                        androidx.compose.material3.HorizontalDivider()
+                        // Android shows its own "Uninstall?" confirmation; the list refreshes on return.
+                        DropdownMenuItem(
+                            text = { Text("Uninstall", color = MaterialTheme.colorScheme.error) },
+                            leadingIcon = { Icon(Icons.Outlined.Delete, null, tint = MaterialTheme.colorScheme.error) },
+                            onClick = { menu = false; onUninstall() },
+                        )
                     }
                 }
             }

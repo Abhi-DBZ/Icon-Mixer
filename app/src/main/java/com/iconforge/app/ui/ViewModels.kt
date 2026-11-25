@@ -153,6 +153,9 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         runCatching { repo.syncPacks(); repo.syncApps() }
     }
 
+    /** System uninstall screen for any app (icon packs); refreshQuietly picks up the change on return. */
+    fun uninstall(pkg: String) = a.exporter.uninstall(pkg)
+
     fun setActive(id: Long) = a.settings.setActiveTheme(id)
 
     fun createTheme(name: String, pack: String?, onCreated: (Long) -> Unit = {}) = work("Matching icons…") {

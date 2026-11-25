@@ -8,6 +8,12 @@ import androidx.compose.foundation.background
 import kotlinx.coroutines.launch
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.ui.layout.onPlaced
+import androidx.compose.ui.layout.positionInParent
+import androidx.compose.foundation.layout.offset
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.foundation.gestures.detectVerticalDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.ui.graphics.toArgb
@@ -233,26 +239,50 @@ fun PickerScreen(main: MainViewModel, nav: NavHostController, themeId: Long, key
                     }
                 }
                 if (sections.size > 1) {
-                    // Letter under the top of the list, shown big while scrolling or using the rail.
+                    // Letter under the top of the list.
                     val first by remember { androidx.compose.runtime.derivedStateOf { gridState.firstVisibleItemIndex } }
                     val current = headerIndex.entries.lastOrNull { it.value <= first + 1 }?.key ?: sections.first().first
-                    var railActive by remember { mutableStateOf(false) }
+                    val letters = sections.map { it.first }
+                    var touchY by remember { mutableStateOf<Float?>(null) }        // finger on the rail (rail px)
+                    var touchLetter by remember { mutableStateOf<Char?>(null) }
+                    var railTop by remember { mutableStateOf(0f) }
+                    var railSize by remember { mutableStateOf(androidx.compose.ui.unit.IntSize.Zero) }
+                    val haptic = androidx.compose.ui.platform.LocalHapticFeedback.current
                     LetterRail(
-                        letters = sections.map { it.first },
-                        current = current,
-                        modifier = Modifier.align(Alignment.CenterEnd).padding(end = 2.dp),
-                        onActive = { railActive = it },
-                    ) { letter -> headerIndex[letter]?.let { idx -> scope.launch { gridState.scrollToItem(idx) } } }
+                        letters = letters,
+                        current = touchLetter ?: current,
+                        touched = touchLetter,
+                        modifier = Modifier.align(Alignment.CenterEnd).padding(end = 2.dp)
+                            .onPlaced { railTop = it.positionInParent().y; railSize = it.size },
+                        onTouch = { y, l -> touchY = y; touchLetter = l },
+                    ) { letter ->
+                        haptic.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.TextHandleMove)
+                        headerIndex[letter]?.let { idx -> scope.launch { gridState.scrollToItem(idx) } }
+                    }
+                    // Drop-shaped bubble next to the rail: follows the finger, or the current
+                    // letter's place on the rail while the list itself is scrolling.
+                    val density = androidx.compose.ui.platform.LocalDensity.current
+                    val bubble = 64.dp
+                    val y = touchY ?: ((letters.indexOf(current).coerceAtLeast(0) + 0.5f) / letters.size * railSize.height)
                     androidx.compose.animation.AnimatedVisibility(
-                        visible = railActive || gridState.isScrollInProgress,
-                        enter = androidx.compose.animation.fadeIn(), exit = androidx.compose.animation.fadeOut(),
-                        modifier = Modifier.align(Alignment.Center),
+                        visible = touchY != null || gridState.isScrollInProgress,
+                        enter = androidx.compose.animation.fadeIn() + androidx.compose.animation.scaleIn(initialScale = 0.6f,
+                            transformOrigin = androidx.compose.ui.graphics.TransformOrigin(1f, 1f)),
+                        exit = androidx.compose.animation.fadeOut(),
+                        modifier = Modifier.align(Alignment.TopEnd).offset {
+                            val b = with(density) { bubble.roundToPx() }
+                            val gap = with(density) { 10.dp.roundToPx() }
+                            androidx.compose.ui.unit.IntOffset(-(railSize.width + gap), (railTop + y - b).toInt().coerceAtLeast(0))
+                        },
                     ) {
-                        Surface(shape = androidx.compose.foundation.shape.CircleShape, color = MaterialTheme.colorScheme.primaryContainer,
-                            shadowElevation = 4.dp, modifier = Modifier.size(72.dp)) {
+                        // Round on three corners, pointed at the bottom-right (towards the finger).
+                        Surface(
+                            shape = RoundedCornerShape(topStartPercent = 50, topEndPercent = 50, bottomEndPercent = 0, bottomStartPercent = 50),
+                            color = MaterialTheme.colorScheme.primary, shadowElevation = 6.dp, modifier = Modifier.size(bubble),
+                        ) {
                             Box(contentAlignment = Alignment.Center) {
-                                Text(current.toString(), style = MaterialTheme.typography.headlineMedium,
-                                    color = MaterialTheme.colorScheme.onPrimaryContainer)
+                                Text((touchLetter ?: current).toString(), style = MaterialTheme.typography.headlineMedium,
+                                    color = MaterialTheme.colorScheme.onPrimary)
                             }
                         }
                     }
@@ -385,41 +415,50 @@ private fun AdjustSheet(base: IconSrc?, scale0: Float, bg0: Int?, shape: IconSha
     }
 }
 
-/** A–Z index on the right edge: tap or drag to jump to a letter. */
+/**
+ * A–Z index on the right edge: touch or slide along it to jump to a letter. Reports the
+ * finger's position ([onTouch], rail px + letter; null on release) for the drop bubble.
+ */
 @Composable
 private fun LetterRail(
-    letters: List<Char>, current: Char, modifier: Modifier = Modifier,
-    onActive: (Boolean) -> Unit = {}, onLetter: (Char) -> Unit,
+    letters: List<Char>, current: Char, touched: Char?, modifier: Modifier = Modifier,
+    onTouch: (Float?, Char?) -> Unit, onLetter: (Char) -> Unit,
 ) {
     var height by remember { mutableStateOf(1) }
     var last by remember { mutableStateOf<Char?>(null) }
-    fun pick(y: Float) {
-        val i = (y / height * letters.size).toInt().coerceIn(0, letters.size - 1)
-        val l = letters[i]
+    fun touch(y: Float) {
+        val l = letters[(y / height * letters.size).toInt().coerceIn(0, letters.size - 1)]
+        onTouch(y.coerceIn(0f, height.toFloat()), l)
         if (l != last) { last = l; onLetter(l) }
     }
     Column(
         modifier
             .onSizeChanged { height = it.height.coerceAtLeast(1) }
             .pointerInput(letters) {
-                detectTapGestures(onPress = { onActive(true); tryAwaitRelease(); onActive(false) }) { pick(it.y); last = null }
-            }
-            .pointerInput(letters) {
-                detectVerticalDragGestures(
-                    onDragStart = { onActive(true); pick(it.y) },
-                    onDragEnd = { last = null; onActive(false) },
-                    onDragCancel = { last = null; onActive(false) },
-                ) { change, _ -> pick(change.position.y) }
+                // One gesture handler for press + slide, so the bubble doesn't flicker
+                // when a tap turns into a drag.
+                awaitEachGesture {
+                    val down = awaitFirstDown()
+                    down.consume(); touch(down.position.y)
+                    while (true) {
+                        val ch = awaitPointerEvent().changes.firstOrNull { it.id == down.id } ?: break
+                        if (!ch.pressed) break
+                        ch.consume(); touch(ch.position.y)
+                    }
+                    last = null; onTouch(null, null)
+                }
             }
             .padding(vertical = 4.dp, horizontal = 4.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
         letters.forEach { l ->
             val on = l == current
+            val big = l == touched
+            // Scaled in a layer, so the rail's height (and the letters under the finger) never move.
             Text(l.toString(), style = MaterialTheme.typography.labelSmall,
                 fontWeight = if (on) androidx.compose.ui.text.font.FontWeight.Bold else null,
                 color = if (on) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.padding(vertical = 1.dp))
+                modifier = Modifier.padding(vertical = 1.dp).graphicsLayer { val k = if (big) 1.5f else 1f; scaleX = k; scaleY = k })
         }
     }
 }

@@ -33,7 +33,7 @@ apps" when Android asks). Android 8.0 or newer.
 - **App scanner**: every launchable app, user and system, with its current icon.
 - **Icon pack detection**: finds installed packs (anything made for Nova/ADW-style launchers,
   e.g. CandyCons, Whicons, Delta, Lines, Crayon, Pix Material You) with author, icon count and
-  how much of *your* phone each one covers.
+  how much of *your* phone each one covers; uninstall a pack from its menu.
 - **Auto matching**: create a theme from a pack and every icon it has is assigned. Coverage is
   shown as apps / themed / missing / %.
 - **Auto-fill (one tap)**: fills the rest from icons your other packs made for those apps, then
@@ -41,7 +41,7 @@ apps" when Android asks). Android 8.0 or newer.
   scale). Guesses and generated icons go to a "To review" list.
 - **Missing icon manager**: the editor lists unthemed apps; for each one you get icons other
   packs made for that exact app, name-based suggestions, and searchable browsing of every
-  installed pack, with a preview next to your other icons. Or keep the original, or use any
+  installed pack (A–Z index with a letter bubble), with a preview next to your other icons. Or keep the original, or use any
   image.
 - **Theme editor**: grid or list view, filters (missing / auto / manual / new / system),
   multi-select bulk edits, undo, reset an app or the whole theme.
