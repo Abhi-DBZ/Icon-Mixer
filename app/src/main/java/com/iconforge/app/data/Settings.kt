@@ -23,6 +23,7 @@ class Settings(context: Context) {
     private val _autoUpdatePack = bool("autoUpdatePack", true)
     private val _liveColours = bool("liveColours", false)
     private val _shapeAllIcons = bool("shapeAllIcons", false)
+    private val _autoUpdateCheck = bool("autoUpdateCheck", true)
 
     val themeMode: StateFlow<Int> = _themeMode
     val pureBlack: StateFlow<Boolean> = _pureBlack
@@ -42,6 +43,8 @@ class Settings(context: Context) {
     val liveColours: StateFlow<Boolean> = _liveColours
     /** Cut every icon to the theme's shape, not only adaptive ones. */
     val shapeAllIcons: StateFlow<Boolean> = _shapeAllIcons
+    /** Look for a new Icon Mixer release on GitHub once a day. */
+    val autoUpdateCheck: StateFlow<Boolean> = _autoUpdateCheck
 
     fun setThemeMode(v: Int) { _themeMode.value = v; prefs.edit().putInt("themeMode", v).apply() }
     fun setPureBlack(v: Boolean) { _pureBlack.value = v; prefs.edit().putBoolean("pureBlack", v).apply() }
@@ -55,6 +58,10 @@ class Settings(context: Context) {
     fun setNotifyNewApps(v: Boolean) { _notifyNewApps.value = v; prefs.edit().putBoolean("notifyNewApps", v).apply() }
     fun setExportSize(v: Int) { _exportSize.value = v; prefs.edit().putInt("exportSize", v).apply() }
     fun setAutoUpdatePack(v: Boolean) { _autoUpdatePack.value = v; prefs.edit().putBoolean("autoUpdatePack", v).apply() }
+    fun setAutoUpdateCheck(v: Boolean) { _autoUpdateCheck.value = v; prefs.edit().putBoolean("autoUpdateCheck", v).apply() }
+    var lastUpdateCheck: Long
+        get() = prefs.getLong("lastUpdateCheck", 0L)
+        set(v) { prefs.edit().putLong("lastUpdateCheck", v).apply() }
     fun setShapeAllIcons(v: Boolean) { _shapeAllIcons.value = v; prefs.edit().putBoolean("shapeAllIcons", v).apply() }
     fun setLiveColours(v: Boolean) { _liveColours.value = v; prefs.edit().putBoolean("liveColours", v).apply() }
     fun setEditorList(v: Boolean) { _editorList.value = v; prefs.edit().putBoolean("editorList", v).apply() }

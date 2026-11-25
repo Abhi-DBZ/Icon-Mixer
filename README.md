@@ -41,6 +41,7 @@ apps" when Android asks). Android 8.0 or newer.
   following your wallpaper in the exported pack.
 - **Calendar icons** that show today's date, when the source pack has them.
 - **Light / dark icons**: packs with separate dark-mode icons keep both; your launcher switches with the phone's theme.
+- **In-app updates** from GitHub releases (Settings → App updates).
 - **Themes**: save, rename, duplicate, delete; ZIP backup and import (also imports exported APKs).
 - **New apps**: when you install an app it's themed automatically from your packs if
   possible; otherwise you get a notification to pick an icon. The installed pack then updates
@@ -67,7 +68,8 @@ installed pack updates.
   from Material You packs stay live (shape and size adjustments don't apply to those).
 - Exported packs are signed with a key created on your phone. If you reinstall Icon Mixer or
   clear its data, uninstall packs exported earlier before installing new ones.
-- Nothing leaves your phone: the app has no internet permission, no accounts, no analytics.
+- Private by design: no accounts, no analytics. The only network access is checking GitHub for
+  a new Icon Mixer version (once a day, can be turned off in Settings) and downloading it when you tap Update.
 
 ## Building from source
 
@@ -79,7 +81,8 @@ Requirements: JDK 17 and the Android SDK (platform 37). Then:
 
 Without a private `keystore/key.properties` the build is signed with the Android debug key.
 
-Tech: Kotlin, Jetpack Compose (Material 3), MVVM, Room, WorkManager, apksig.
+Tech: Kotlin, Jetpack Compose (Material 3), MVVM, Room, WorkManager, apksig, MaterialKolor.
+Third-party licences: [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
 
 | Code | What |
 |---|---|

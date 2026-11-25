@@ -221,7 +221,7 @@ class PackExporter(
         }
 
         // Optional: carry the whole base pack, so apps installed later are themed too.
-        val base = theme.basePack
+        val base = repo.themePack(themeId)
         if (settings.includeWholePack.value && base != null) {
             val pack = packs.load(base)
             if (pack != null) {
@@ -302,7 +302,7 @@ class PackExporter(
      * Hands the APK to the system installer. With [silent] (Android 12+) an update of a pack
      * this app installed earlier goes through without the confirm screen.
      */
-    fun install(apk: File, silent: Boolean = false) {
+    fun install(apk: File, silent: Boolean = false, selfUpdate: Boolean = false) {
         val installer = context.packageManager.packageInstaller
         val params = PackageInstaller.SessionParams(PackageInstaller.SessionParams.MODE_FULL_INSTALL)
         if (silent && Build.VERSION.SDK_INT >= 31) {
@@ -315,6 +315,7 @@ class PackExporter(
                 s.fsync(out)
             }
             val intent = Intent(context, InstallResultReceiver::class.java).putExtra(InstallResultReceiver.EXTRA_SILENT, silent)
+                .putExtra(InstallResultReceiver.EXTRA_SELF, selfUpdate)
             val flags = PendingIntent.FLAG_UPDATE_CURRENT or
                 (if (Build.VERSION.SDK_INT >= 31) PendingIntent.FLAG_MUTABLE else 0)
             s.commit(PendingIntent.getBroadcast(context, id, intent, flags).intentSender)
@@ -468,7 +469,7 @@ object PackSigner {
 
 /** Result of a PackageInstaller session; shows the confirm screen and reports the outcome. */
 class InstallResultReceiver : BroadcastReceiver() {
-    companion object { const val EXTRA_SILENT = "silent" }
+    companion object { const val EXTRA_SILENT = "silent"; const val EXTRA_SELF = "self" }
 
     override fun onReceive(context: Context, intent: Intent) {
         when (val status = intent.getIntExtra(PackageInstaller.EXTRA_STATUS, PackageInstaller.STATUS_FAILURE)) {
@@ -483,6 +484,7 @@ class InstallResultReceiver : BroadcastReceiver() {
                     "New icons are ready. Tap to install the update.", confirm)
             }
             PackageInstaller.STATUS_SUCCESS -> {
+                if (intent.getBooleanExtra(EXTRA_SELF, false)) return
                 InstallEvents.emit("Icon pack installed. Now pick it in your launcher's icon settings.")
                 if (!com.iconforge.app.AppState.foreground && intent.getBooleanExtra(EXTRA_SILENT, false)) {
                     com.iconforge.app.Notifications.packUpdate(context, "Icon pack updated", "New apps now have icons on your home screen.", null)

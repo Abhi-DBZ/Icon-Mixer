@@ -91,6 +91,9 @@ fun IconForgeTheme(settings: Settings, content: @Composable () -> Unit) {
 /** Shape adaptive icons are previewed in (set per screen from the theme being edited). */
 val LocalIconShape = staticCompositionLocalOf { IconShape.DEFAULT }
 
+/** Light/dark mode icons are drawn in (null = the phone's mode); the home preview switches it. */
+val LocalIconNight = staticCompositionLocalOf<Boolean?> { null }
+
 /** Loads an icon asynchronously through the shared cache. */
 @Composable
 fun IconImage(src: IconSrc?, size: Dp, modifier: Modifier = Modifier, dim: Boolean = false,
@@ -98,9 +101,10 @@ fun IconImage(src: IconSrc?, size: Dp, modifier: Modifier = Modifier, dim: Boole
     val ctx = LocalContext.current
     val px = with(LocalDensity.current) { size.roundToPx() }.coerceIn(24, 384)
     val loader = ctx.app.icons
-    val bmp by produceState<ImageBitmap?>(src?.let { loader.peek(it, px, shape)?.asImageBitmap() }, src?.key, px, shape) {
-        value = src?.let { loader.peek(it, px, shape)?.asImageBitmap() }
-        if (src != null && value == null) value = loader.bitmap(src, px, shape)?.asImageBitmap()
+    val night = LocalIconNight.current
+    val bmp by produceState<ImageBitmap?>(src?.let { loader.peek(it, px, shape, night)?.asImageBitmap() }, src?.key, px, shape, night) {
+        value = src?.let { loader.peek(it, px, shape, night)?.asImageBitmap() }
+        if (src != null && value == null) value = loader.bitmap(src, px, shape, night)?.asImageBitmap()
     }
     Box(modifier.size(size), contentAlignment = Alignment.Center) {
         val b = bmp

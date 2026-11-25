@@ -6,6 +6,8 @@ import android.provider.Settings as AndroidSettings
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.clickable
+import androidx.compose.ui.graphics.asComposePath
+import androidx.compose.material.icons.outlined.AutoAwesome
 import androidx.compose.material.icons.outlined.Contrast
 import androidx.compose.material.icons.outlined.Wallpaper
 import androidx.compose.material.icons.outlined.Check
@@ -46,6 +48,9 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
+import androidx.compose.material3.SegmentedButton
+import androidx.compose.material3.SegmentedButtonDefaults
+import androidx.compose.material3.SingleChoiceSegmentedButtonRow
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -212,20 +217,19 @@ fun ExportScreen(nav: NavHostController, themeId: Long) {
                     Text("Options", style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.primary,
                         modifier = Modifier.padding(horizontal = 16.dp))
                     OptionLabel("Icon shape · adaptive icons")
-                    FlowRow(Modifier.padding(horizontal = 16.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                        IconShape.entries.forEach { s ->
-                            FilterChip(t.iconShape == s.name, { vm.setIconShape(s.name) },
-                                { Text(if (s == IconShape.DEFAULT) "Default" else s.label, maxLines = 1, softWrap = false) })
-                        }
-                    }
+                    ShapeSelector(IconShape.of(t.iconShape)) { vm.setIconShape(it.name) }
                     if (t.iconShape != "DEFAULT") {
                         val all by vm.settings.shapeAllIcons.collectAsState()
                         SwitchRow("Shape every icon", "Also icons that aren't adaptive", all) { vm.settings.setShapeAllIcons(it) }
                     }
                     OptionLabel("Icon size")
-                    FlowRow(Modifier.padding(horizontal = 16.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                        listOf(128 to "Small", 192 to "Standard", 256 to "Sharp").forEach { (px, label) ->
-                            FilterChip(size == px, { vm.settings.setExportSize(px) }, { Text("$label · $px", maxLines = 1, softWrap = false) })
+                    val sizes = listOf(128 to "S · 128", 192 to "M · 192", 256 to "L · 256")
+                    SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth().padding(horizontal = 16.dp)) {
+                        sizes.forEachIndexed { i, (px, label) ->
+                            SegmentedButton(
+                                selected = size == px, onClick = { vm.settings.setExportSize(px) },
+                                shape = SegmentedButtonDefaults.itemShape(i, sizes.size),
+                            ) { Text(label, maxLines = 1, softWrap = false) }
                         }
                     }
                     Gap(h = 4.dp)
@@ -298,85 +302,24 @@ private fun SwitchRow(title: String, hint: String, checked: Boolean, onChange: (
     }
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-fun SettingsScreen(vm: MainViewModel) {
-    val s = vm.a.settings
-    val mode by s.themeMode.collectAsState()
-    val black by s.pureBlack.collectAsState()
-    val dynamic by s.dynamicColor.collectAsState()
-    val seed by s.seedColor.collectAsState()
-    val notify by s.notifyNewApps.collectAsState()
-
-    Scaffold(topBar = { TopAppBar(title = { Text("Settings") }) }) { pad ->
-        Column(Modifier.fillMaxSize().padding(pad).verticalScroll(rememberScrollState())) {
-            SectionTitle("Appearance")
-            Row(Modifier.padding(horizontal = 16.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                listOf(Settings.MODE_SYSTEM to "System", Settings.MODE_LIGHT to "Light", Settings.MODE_DARK to "Dark").forEach { (m, l) ->
-                    FilterChip(mode == m, { s.setThemeMode(m) }, { Text(l) })
-                }
-            }
-            Text("Colour", style = MaterialTheme.typography.bodyMedium,
-                modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 16.dp, bottom = 8.dp))
-            ColourPicker(
-                wallpaper = dynamic && android.os.Build.VERSION.SDK_INT >= 31,
-                seed = seed,
-                onWallpaper = { s.setDynamicColor(true) },
-                onColour = { s.setSeedColor(it) },
-            )
-            ListItem(
-                modifier = Modifier.clickable { s.setPureBlack(!black) },
-                leadingContent = { Icon(Icons.Outlined.Contrast, null) },
-                headlineContent = { Text("Pure black dark theme") },
-                supportingContent = { Text("True black backgrounds for AMOLED screens") },
-                trailingContent = { Switch(black, { s.setPureBlack(it) }) },
-            )
-            HorizontalDivider(Modifier.padding(vertical = 8.dp))
-            SectionTitle("New apps")
-            ListItem(
-                modifier = Modifier.clickable { s.setNotifyNewApps(!notify) },
-                headlineContent = { Text("Notify about unthemed new apps") },
-                supportingContent = { Text("When you install an app, Icon Mixer fills its icon from your theme's packs. If none fits, you get a notification to pick one.") },
-                trailingContent = { Switch(notify, { s.setNotifyNewApps(it) }) },
-            )
-            val autoUpdate by s.autoUpdatePack.collectAsState()
-            ListItem(
-                modifier = Modifier.clickable { s.setAutoUpdatePack(!autoUpdate) },
-                headlineContent = { Text("Keep the installed pack up to date") },
-                supportingContent = { Text("When new apps get icons, rebuild your installed icon pack and update it. On Android 12+ this happens without asking.") },
-                trailingContent = { Switch(autoUpdate, { s.setAutoUpdatePack(it) }) },
-            )
-            HorizontalDivider(Modifier.padding(vertical = 8.dp))
-            SectionTitle("About")
-            ListItem(
-                headlineContent = { Text("Icon Mixer 1.9.1") },
-                supportingContent = {
-                    Text("Mixes icons from the packs you own into one complete pack. Exported packs are signed with a key kept on this phone; " +
-                        "if you reinstall Icon Mixer, uninstall old exported packs before installing new ones.")
-                },
-            )
-        }
-    }
-}
-
 /** Wallpaper colours (Android 12+) or one of the app colours; the chosen one shows a tick. */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
-private fun ColourPicker(wallpaper: Boolean, seed: Int, onWallpaper: () -> Unit, onColour: (Int) -> Unit) {
+internal fun ColourPicker(wallpaper: Boolean, seed: Int, swatch: Int = 48, onWallpaper: () -> Unit, onColour: (Int) -> Unit) {
     val cs = MaterialTheme.colorScheme
     FlowRow(
         Modifier.fillMaxWidth().padding(horizontal = 16.dp),
-        horizontalArrangement = Arrangement.spacedBy(12.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp),
+        horizontalArrangement = Arrangement.spacedBy(10.dp),
+        verticalArrangement = Arrangement.spacedBy(10.dp),
     ) {
         if (android.os.Build.VERSION.SDK_INT >= 31) {
-            Swatch(selected = wallpaper, fill = cs.surfaceContainerHighest, label = "Wallpaper colours", onClick = onWallpaper) {
+            Swatch(selected = wallpaper, fill = cs.surfaceContainerHighest, label = "Wallpaper colours", size = swatch, onClick = onWallpaper) {
                 Icon(Icons.Outlined.Wallpaper, null, tint = if (wallpaper) cs.onPrimary else cs.onSurfaceVariant)
             }
         }
         APP_COLOURS.forEach { (name, c) ->
             val on = !wallpaper && seed == c
-            Swatch(selected = on, fill = androidx.compose.ui.graphics.Color(c), label = name, onClick = { onColour(c) }) {
+            Swatch(selected = on, fill = androidx.compose.ui.graphics.Color(c), label = name, size = swatch, onClick = { onColour(c) }) {
                 if (on) Icon(Icons.Outlined.Check, null, tint = androidx.compose.ui.graphics.Color.White)
             }
         }
@@ -385,12 +328,12 @@ private fun ColourPicker(wallpaper: Boolean, seed: Int, onWallpaper: () -> Unit,
 
 @Composable
 private fun Swatch(
-    selected: Boolean, fill: androidx.compose.ui.graphics.Color, label: String, onClick: () -> Unit,
+    selected: Boolean, fill: androidx.compose.ui.graphics.Color, label: String, size: Int = 48, onClick: () -> Unit,
     content: @Composable () -> Unit,
 ) {
     val cs = MaterialTheme.colorScheme
     androidx.compose.foundation.layout.Box(
-        Modifier.size(48.dp)
+        Modifier.size(size.dp)
             .clip(androidx.compose.foundation.shape.CircleShape)
             .background(if (selected && fill == cs.surfaceContainerHighest) cs.primary else fill)
             .then(if (selected) Modifier.border(3.dp, cs.outline, androidx.compose.foundation.shape.CircleShape) else Modifier)
@@ -398,4 +341,37 @@ private fun Swatch(
             .semantics { contentDescription = label },
         contentAlignment = Alignment.Center,
     ) { content() }
+}
+
+/** The icon shapes as small drawings in one row; the chosen one is named underneath. */
+@Composable
+private fun ShapeSelector(current: IconShape, onPick: (IconShape) -> Unit) {
+    val cs = MaterialTheme.colorScheme
+    Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp), horizontalArrangement = Arrangement.SpaceBetween) {
+        IconShape.entries.forEach { shape ->
+            val on = shape == current
+            androidx.compose.foundation.layout.Box(
+                Modifier.size(46.dp).clip(androidx.compose.foundation.shape.RoundedCornerShape(14.dp))
+                    .background(if (on) cs.primaryContainer else androidx.compose.ui.graphics.Color.Transparent)
+                    .border(if (on) 2.dp else 1.dp, if (on) cs.primary else cs.outlineVariant, androidx.compose.foundation.shape.RoundedCornerShape(14.dp))
+                    .clickable(onClickLabel = shape.label) { onPick(shape) }
+                    .semantics { contentDescription = shape.label },
+                contentAlignment = Alignment.Center,
+            ) {
+                if (shape == IconShape.DEFAULT) {
+                    Icon(Icons.Outlined.AutoAwesome, null, tint = if (on) cs.onPrimaryContainer else cs.onSurfaceVariant)
+                } else {
+                    val fill = if (on) cs.primary else cs.onSurfaceVariant
+                    androidx.compose.foundation.Canvas(Modifier.size(24.dp)) {
+                        drawPath(shape.path(size.minDimension).asComposePath(), fill)
+                    }
+                }
+            }
+        }
+    }
+    Text(
+        if (current == IconShape.DEFAULT) "Launcher default" else current.label,
+        style = MaterialTheme.typography.labelSmall, color = cs.onSurfaceVariant,
+        modifier = Modifier.padding(start = 16.dp, top = 4.dp),
+    )
 }

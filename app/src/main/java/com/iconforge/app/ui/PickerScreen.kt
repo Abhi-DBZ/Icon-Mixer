@@ -79,7 +79,7 @@ import com.iconforge.app.core.IconSrc
 
 private data class Candidate(val pack: String, val packLabel: String, val drawable: String)
 
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
 @Composable
 fun PickerScreen(main: MainViewModel, nav: NavHostController, themeId: Long, keys: List<String>) {
     val ctx = LocalContext.current
@@ -147,17 +147,18 @@ fun PickerScreen(main: MainViewModel, nav: NavHostController, themeId: Long, key
                             maxLines = 2, overflow = TextOverflow.Ellipsis,
                         )
                     }
-                    Row(Modifier.horizontalScroll(rememberScrollState()).padding(horizontal = 4.dp),
+                    // Wraps instead of scrolling sideways, so every action stays visible.
+                    androidx.compose.foundation.layout.FlowRow(Modifier.padding(horizontal = 4.dp),
                         horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        if (packs.isNotEmpty()) AssistChip(onClick = { vm.generate(done) }, label = { Text("Generate in pack style") },
+                        if (packs.isNotEmpty()) AssistChip(onClick = { vm.generate(done) }, label = { Text("Generate") },
                             leadingIcon = { Icon(Icons.Outlined.AutoFixHigh, null, Modifier.size(18.dp)) })
                         if (mapping != null) AssistChip(onClick = { adjusting = true }, label = { Text("Adjust") },
                             leadingIcon = { Icon(Icons.Outlined.Tune, null, Modifier.size(18.dp)) })
                         AssistChip(onClick = { vm.keepOriginal(done) }, label = { Text("Keep original") },
                             leadingIcon = { Icon(Icons.Outlined.Restore, null, Modifier.size(18.dp)) })
                         AssistChip(onClick = { imagePicker.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)) },
-                            label = { Text("Use an image") }, leadingIcon = { Icon(Icons.Outlined.Image, null, Modifier.size(18.dp)) })
-                        if (mapping != null) AssistChip(onClick = { vm.clear(done) }, label = { Text("Remove icon") },
+                            label = { Text("Image") }, leadingIcon = { Icon(Icons.Outlined.Image, null, Modifier.size(18.dp)) })
+                        if (mapping != null) AssistChip(onClick = { vm.clear(done) }, label = { Text("Remove") },
                             leadingIcon = { Icon(Icons.Outlined.RemoveCircleOutline, null, Modifier.size(18.dp)) })
                     }
                 }
@@ -239,10 +240,31 @@ fun PickerScreen(main: MainViewModel, nav: NavHostController, themeId: Long, key
                         }
                     }
                 }
-                if (sections.size > 1) LetterRail(
-                    letters = sections.map { it.first },
-                    modifier = Modifier.align(Alignment.CenterEnd).padding(end = 2.dp),
-                ) { letter -> headerIndex[letter]?.let { idx -> scope.launch { gridState.scrollToItem(idx) } } }
+                if (sections.size > 1) {
+                    // Letter under the top of the list, shown big while scrolling or using the rail.
+                    val first by remember { androidx.compose.runtime.derivedStateOf { gridState.firstVisibleItemIndex } }
+                    val current = headerIndex.entries.lastOrNull { it.value <= first + 1 }?.key ?: sections.first().first
+                    var railActive by remember { mutableStateOf(false) }
+                    LetterRail(
+                        letters = sections.map { it.first },
+                        current = current,
+                        modifier = Modifier.align(Alignment.CenterEnd).padding(end = 2.dp),
+                        onActive = { railActive = it },
+                    ) { letter -> headerIndex[letter]?.let { idx -> scope.launch { gridState.scrollToItem(idx) } } }
+                    androidx.compose.animation.AnimatedVisibility(
+                        visible = railActive || gridState.isScrollInProgress,
+                        enter = androidx.compose.animation.fadeIn(), exit = androidx.compose.animation.fadeOut(),
+                        modifier = Modifier.align(Alignment.Center),
+                    ) {
+                        Surface(shape = androidx.compose.foundation.shape.CircleShape, color = MaterialTheme.colorScheme.primaryContainer,
+                            shadowElevation = 4.dp, modifier = Modifier.size(72.dp)) {
+                            Box(contentAlignment = Alignment.Center) {
+                                Text(current.toString(), style = MaterialTheme.typography.headlineMedium,
+                                    color = MaterialTheme.colorScheme.onPrimaryContainer)
+                            }
+                        }
+                    }
+                }
             }
         }
       }
@@ -373,7 +395,10 @@ private fun AdjustSheet(base: IconSrc?, scale0: Float, bg0: Int?, shape: IconSha
 
 /** A–Z index on the right edge: tap or drag to jump to a letter. */
 @Composable
-private fun LetterRail(letters: List<Char>, modifier: Modifier = Modifier, onLetter: (Char) -> Unit) {
+private fun LetterRail(
+    letters: List<Char>, current: Char, modifier: Modifier = Modifier,
+    onActive: (Boolean) -> Unit = {}, onLetter: (Char) -> Unit,
+) {
     var height by remember { mutableStateOf(1) }
     var last by remember { mutableStateOf<Char?>(null) }
     fun pick(y: Float) {
@@ -384,15 +409,24 @@ private fun LetterRail(letters: List<Char>, modifier: Modifier = Modifier, onLet
     Column(
         modifier
             .onSizeChanged { height = it.height.coerceAtLeast(1) }
-            .pointerInput(letters) { detectTapGestures { pick(it.y); last = null } }
             .pointerInput(letters) {
-                detectVerticalDragGestures(onDragStart = { pick(it.y) }, onDragEnd = { last = null }) { change, _ -> pick(change.position.y) }
+                detectTapGestures(onPress = { onActive(true); tryAwaitRelease(); onActive(false) }) { pick(it.y); last = null }
+            }
+            .pointerInput(letters) {
+                detectVerticalDragGestures(
+                    onDragStart = { onActive(true); pick(it.y) },
+                    onDragEnd = { last = null; onActive(false) },
+                    onDragCancel = { last = null; onActive(false) },
+                ) { change, _ -> pick(change.position.y) }
             }
             .padding(vertical = 4.dp, horizontal = 4.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
         letters.forEach { l ->
-            Text(l.toString(), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
+            val on = l == current
+            Text(l.toString(), style = MaterialTheme.typography.labelSmall,
+                fontWeight = if (on) androidx.compose.ui.text.font.FontWeight.Bold else null,
+                color = if (on) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.padding(vertical = 1.dp))
         }
     }

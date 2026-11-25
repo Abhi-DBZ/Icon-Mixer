@@ -72,7 +72,59 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     private val _scanned = MutableStateFlow(false)
     val scanned: StateFlow<Boolean> = _scanned
 
-    init { refresh(first = true) }
+    init {
+        refresh(first = true)
+        if (a.settings.autoUpdateCheck.value && System.currentTimeMillis() - a.settings.lastUpdateCheck > 24 * 3_600_000L) checkForUpdate(manual = false)
+    }
+
+    // ------------------------------------------------------------ app updates (GitHub releases)
+
+    sealed interface Update {
+        data object Idle : Update
+        data object Checking : Update
+        data object UpToDate : Update
+        data class Available(val release: com.iconforge.app.core.Updater.Release) : Update
+        data class Downloading(val progress: Float) : Update
+        data class Failed(val message: String) : Update
+    }
+
+    private val _update = MutableStateFlow<Update>(Update.Idle)
+    val update: StateFlow<Update> = _update
+
+    private val appVersion: String get() =
+        runCatching { a.packageManager.getPackageInfo(a.packageName, 0).versionName }.getOrNull() ?: "0"
+
+    fun checkForUpdate(manual: Boolean) = viewModelScope.launch {
+        _update.value = Update.Checking
+        _update.value = try {
+            val r = com.iconforge.app.core.Updater.latest()
+            a.settings.lastUpdateCheck = System.currentTimeMillis()
+            if (r != null && com.iconforge.app.core.Updater.isNewer(r.version, appVersion)) {
+                if (!manual) say("Icon Mixer ${r.version} is available", "Update") { installUpdate(r) }
+                Update.Available(r)
+            } else Update.UpToDate
+        } catch (e: Exception) {
+            if (manual) Update.Failed("Couldn't reach GitHub: ${e.message ?: "no connection"}") else Update.Idle
+        }
+    }
+
+    /** Downloads the release APK and hands it to the installer (Android asks to confirm). */
+    fun installUpdate(r: com.iconforge.app.core.Updater.Release) = viewModelScope.launch {
+        if (!a.packageManager.canRequestPackageInstalls()) {
+            a.startActivity(android.content.Intent(android.provider.Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES,
+                android.net.Uri.parse("package:${a.packageName}")).addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK))
+            say("Allow Icon Mixer to install apps, then tap Update again")
+            return@launch
+        }
+        try {
+            _update.value = Update.Downloading(0f)
+            val apk = com.iconforge.app.core.Updater.download(r, java.io.File(a.cacheDir, "update")) { p -> _update.value = Update.Downloading(p) }
+            _update.value = Update.Available(r)
+            a.exporter.install(apk, selfUpdate = true)
+        } catch (e: Exception) {
+            _update.value = Update.Failed("Download failed: ${e.message ?: "no connection"}")
+        }
+    }
 
     fun say(msg: String) { _messages.tryEmit(UiMsg(msg)) }
     fun say(msg: String, action: String, onAction: () -> Unit) { _messages.tryEmit(UiMsg(msg, action, onAction)) }
@@ -119,6 +171,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     fun applyPack(themeId: Long, pack: String) = work("Matching icons…") {
         val n = repo.autoMatch(themeId, pack, onlyMissing = false)
+        repo.setBasePack(themeId, pack)
         val c = repo.coverage(themeId)
         say("$n icons applied · coverage ${c.percent}%")
     }
@@ -273,7 +326,9 @@ class PickerViewModel(application: Application, val themeId: Long, val keys: Lis
         viewModelScope.launch {
             val t = a.db.themes().get(themeId)
             val ps = a.db.packs().all()
-            selectedPack.value = t?.basePack?.takeIf { b -> ps.any { it.packageName == b } } ?: ps.firstOrNull()?.packageName
+            // Open on the theme's own pack (the one its icons come from), not the first alphabetically.
+            val own = a.repo.themePack(themeId)
+            selectedPack.value = own?.takeIf { b -> ps.any { it.packageName == b } } ?: ps.firstOrNull()?.packageName
         }
     }
 

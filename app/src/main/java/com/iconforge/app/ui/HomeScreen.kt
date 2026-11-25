@@ -23,6 +23,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.AutoFixHigh
 import androidx.compose.material.icons.outlined.CheckCircle
+import androidx.compose.material.icons.outlined.Close
 import androidx.compose.material.icons.outlined.ContentCopy
 import androidx.compose.material.icons.outlined.Delete
 import androidx.compose.material.icons.outlined.Edit
@@ -151,24 +152,23 @@ fun HomeScreen(vm: MainViewModel, nav: NavHostController) {
             } else {
                 item { ActiveThemeCard(t, coverage, packs, reviewCount, nav, vm) { autoFillFor = t.id } }
                 if (newApps.isNotEmpty()) item {
-                    Card(
-                        Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 6.dp),
-                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.tertiaryContainer),
+                    // One quiet row: new apps' icons, Review, and a clear close button.
+                    ElevatedCard(
+                        onClick = { nav.navigate(Routes.editor(t.id, "NEW")) },
+                        modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp),
                     ) {
-                        Column(Modifier.padding(16.dp)) {
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                Icon(Icons.Outlined.NewReleases, null)
-                                Gap(w = 8.dp)
-                                Text("${newApps.size} newly installed app${if (newApps.size > 1) "s" else ""}",
-                                    style = MaterialTheme.typography.titleSmall, modifier = Modifier.weight(1f))
-                                TextButton(onClick = { vm.markAllSeen() }) { Text("Dismiss") }
+                        Row(Modifier.padding(start = 14.dp, end = 4.dp, top = 6.dp, bottom = 6.dp), verticalAlignment = Alignment.CenterVertically) {
+                            newApps.take(3).forEach { IconImage(IconSrc.original(it), 28.dp, Modifier.padding(end = 4.dp)) }
+                            Gap(w = 6.dp)
+                            Text(
+                                if (newApps.size == 1) "${newApps[0].label} is new" else "${newApps.size} new apps",
+                                style = MaterialTheme.typography.bodyMedium, maxLines = 1, overflow = TextOverflow.Ellipsis,
+                                modifier = Modifier.weight(1f),
+                            )
+                            TextButton(onClick = { nav.navigate(Routes.editor(t.id, "NEW")) }) { Text("Review") }
+                            IconButton(onClick = { vm.markAllSeen() }) {
+                                Icon(Icons.Outlined.Close, "Dismiss", tint = MaterialTheme.colorScheme.onSurfaceVariant)
                             }
-                            LazyRow(Modifier.padding(vertical = 8.dp)) {
-                                items(newApps, key = { it.componentKey }) { IconImage(IconSrc.original(it), 44.dp, Modifier.padding(end = 6.dp)) }
-                            }
-                            Button(onClick = { nav.navigate(Routes.editor(t.id, "NEW")) },
-                                colors = androidx.compose.material3.ButtonDefaults.buttonColors(
-                                    containerColor = MaterialTheme.colorScheme.tertiary, contentColor = MaterialTheme.colorScheme.onTertiary)) { Text("Review icons") }
                         }
                     }
                 }

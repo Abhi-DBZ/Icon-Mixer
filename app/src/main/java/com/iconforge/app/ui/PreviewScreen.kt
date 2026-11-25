@@ -28,6 +28,9 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.ArrowBack
 import androidx.compose.material.icons.outlined.GridView
 import androidx.compose.material.icons.outlined.Image
+import androidx.compose.material.icons.outlined.HideImage
+import androidx.compose.material.icons.outlined.LightMode
+import androidx.compose.material.icons.outlined.DarkMode
 import androidx.compose.material.icons.outlined.ReportProblem
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -85,6 +88,8 @@ fun PreviewScreen(main: MainViewModel, nav: NavHostController, themeId: Long) {
     var columns by rememberSaveable { mutableIntStateOf(4) }
     var highlight by rememberSaveable { mutableStateOf(false) }
     var bgVersion by remember { mutableIntStateOf(0) }
+    val systemDark = androidx.compose.foundation.isSystemInDarkTheme()
+    var dark by rememberSaveable { mutableStateOf(systemDark) }
     val scope = rememberCoroutineScope()
     val bgFile = remember { File(ctx.filesDir, "preview_background.jpg") }
 
@@ -103,8 +108,10 @@ fun PreviewScreen(main: MainViewModel, nav: NavHostController, themeId: Long) {
             }
         }.getOrNull() else null
     }
-    val gradient = (wallColors?.takeIf { it.isNotEmpty() } ?: listOf(MaterialTheme.colorScheme.primaryContainer, MaterialTheme.colorScheme.tertiaryContainer))
+    // Same wallpaper colours, lightened or darkened for the light/dark preview.
+    val gradient = (wallColors?.takeIf { it.isNotEmpty() } ?: listOf(Color(0xFF8C9BF2), Color(0xFFFF9E80)))
         .let { if (it.size == 1) it + it else it }
+        .map { c -> if (dark) androidx.compose.ui.graphics.lerp(c, Color.Black, 0.62f) else androidx.compose.ui.graphics.lerp(c, Color.White, 0.45f) }
     val picker = rememberLauncherForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri ->
         if (uri != null) scope.launch {
             withContext(Dispatchers.IO) {
@@ -117,22 +124,31 @@ fun PreviewScreen(main: MainViewModel, nav: NavHostController, themeId: Long) {
     val shape = IconShape.of(theme?.iconShape)
     val sorted = remember(apps) { apps.sortedBy { it.label.lowercase() } }
     val dock = remember(sorted, byKey) { sorted.filter { it.componentKey in byKey }.take(columns) }
-    val label = TextStyle(color = Color.White, fontSize = 11.sp, shadow = Shadow(Color.Black.copy(alpha = 0.7f), Offset(0f, 1f), 4f))
+    val onPhoto = photo != null
+    val ink = if (dark || onPhoto) Color.White else Color(0xFF1B1B1F)
+    val label = if (dark || onPhoto) TextStyle(color = Color.White, fontSize = 11.sp, shadow = Shadow(Color.Black.copy(alpha = 0.7f), Offset(0f, 1f), 4f))
+        else TextStyle(color = ink, fontSize = 11.sp)
 
-    CompositionLocalProvider(LocalIconShape provides shape) {
+    CompositionLocalProvider(LocalIconShape provides shape, LocalIconNight provides dark) {
         Box(Modifier.fillMaxSize().background(Brush.verticalGradient(gradient))) {
             photo?.let { Image(it, null, Modifier.fillMaxSize(), contentScale = ContentScale.Crop) }
             Column(Modifier.fillMaxSize().statusBarsPadding().navigationBarsPadding()) {
                 Row(Modifier.fillMaxWidth().padding(4.dp), verticalAlignment = Alignment.CenterVertically) {
-                    IconButton(onClick = { nav.popBackStack() }) { Icon(Icons.AutoMirrored.Outlined.ArrowBack, "Back", tint = Color.White) }
+                    IconButton(onClick = { nav.popBackStack() }) { Icon(Icons.AutoMirrored.Outlined.ArrowBack, "Back", tint = ink) }
                     Text(theme?.name ?: "", style = MaterialTheme.typography.titleMedium.merge(label.copy(fontSize = 18.sp)),
                         modifier = Modifier.weight(1f), maxLines = 1, overflow = TextOverflow.Ellipsis)
                     IconButton(onClick = { highlight = !highlight }) {
-                        Icon(Icons.Outlined.ReportProblem, "Highlight missing", tint = if (highlight) Color(0xFFFFB4AB) else Color.White)
+                        Icon(Icons.Outlined.ReportProblem, "Highlight missing", tint = if (highlight) Color(0xFFE53935) else ink)
                     }
-                    IconButton(onClick = { columns = if (columns == 4) 5 else 4 }) { Icon(Icons.Outlined.GridView, "Columns", tint = Color.White) }
-                    IconButton(onClick = { picker.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)) }) {
-                        Icon(Icons.Outlined.Image, "Background photo", tint = Color.White)
+                    IconButton(onClick = { dark = !dark }) {
+                        Icon(if (dark) Icons.Outlined.LightMode else Icons.Outlined.DarkMode,
+                            if (dark) "Show light mode" else "Show dark mode", tint = ink)
+                    }
+                    IconButton(onClick = { columns = if (columns == 4) 5 else 4 }) { Icon(Icons.Outlined.GridView, "Columns", tint = ink) }
+                    if (onPhoto) IconButton(onClick = { bgFile.delete(); bgVersion++ }) {
+                        Icon(Icons.Outlined.HideImage, "Use wallpaper colours", tint = ink)
+                    } else IconButton(onClick = { picker.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)) }) {
+                        Icon(Icons.Outlined.Image, "Background photo", tint = ink)
                     }
                 }
                 LazyVerticalGrid(
@@ -159,7 +175,7 @@ fun PreviewScreen(main: MainViewModel, nav: NavHostController, themeId: Long) {
                 // Dock
                 Row(
                     Modifier.fillMaxWidth().padding(12.dp).clip(RoundedCornerShape(28.dp))
-                        .background(Color.White.copy(alpha = 0.18f)).padding(vertical = 10.dp),
+                        .background((if (dark || onPhoto) Color.White else Color.Black).copy(alpha = if (dark || onPhoto) 0.18f else 0.08f)).padding(vertical = 10.dp),
                     horizontalArrangement = Arrangement.SpaceEvenly,
                 ) {
                     dock.forEach { app -> IconImage(IconSrc.of(byKey[app.componentKey], app), 52.dp) }

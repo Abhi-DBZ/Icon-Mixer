@@ -156,7 +156,7 @@ class ThemeRepository(
 
     /** Back to what the theme's base pack gives (or nothing). */
     suspend fun resetApps(themeId: Long, keys: List<String>) {
-        val base = db.themes().get(themeId)?.basePack
+        val base = themePack(themeId)
         change(themeId, keys, "Reset ${keys.size} app(s)") {
             db.mappings().delete(themeId, keys)
             if (base != null) autoMatchInternal(themeId, base, onlyMissing = true, overwriteManual = false, keys = keys)
@@ -164,7 +164,7 @@ class ThemeRepository(
     }
 
     suspend fun resetTheme(themeId: Long) {
-        val base = db.themes().get(themeId)?.basePack
+        val base = themePack(themeId)
         change(themeId, null, "Reset theme") {
             db.mappings().deleteTheme(themeId)
             if (base != null) autoMatchInternal(themeId, base, onlyMissing = false, overwriteManual = false, keys = null)
@@ -209,8 +209,25 @@ class ThemeRepository(
     /** The pack a theme is built on: its base pack, else the pack most of its icons come from. */
     suspend fun themePack(themeId: Long): String? {
         val t = db.themes().get(themeId) ?: return null
-        return t.basePack ?: db.mappings().forTheme(themeId).mapNotNull { it.iconPack }
-            .groupingBy { it }.eachCount().maxByOrNull { it.value }?.key
+        return dominantPack(themeId) ?: t.basePack
+    }
+
+    /** The pack at least half of the theme's pack icons come from (null if none dominates). */
+    private suspend fun dominantPack(themeId: Long): String? {
+        val counts = db.mappings().forTheme(themeId).filter { it.source == Source.PACK }
+            .mapNotNull { it.iconPack }.groupingBy { it }.eachCount()
+        val total = counts.values.sum()
+        val top = counts.maxByOrNull { it.value } ?: return null
+        return top.key.takeIf { total >= 3 && top.value * 2 >= total }
+    }
+
+    /**
+     * Keeps the stored base pack equal to the pack the theme is really made of, so everything that
+     * uses it (default tab in the picker, "whole base pack", reset, new apps) picks the right one.
+     */
+    private suspend fun syncBasePack(t: ThemeEntity): ThemeEntity {
+        val d = dominantPack(t.id) ?: return t
+        return if (d != t.basePack) t.copy(basePack = d) else t
     }
 
     /**
@@ -314,13 +331,13 @@ class ThemeRepository(
     }
 
     suspend fun refreshStats(themeId: Long) {
-        val t = db.themes().get(themeId) ?: return
+        val t = syncBasePack(db.themes().get(themeId) ?: return)
         val c = coverage(themeId)
         db.themes().update(t.copy(totalApps = c.total, themedApps = c.themed, coverage = c.fraction))
     }
 
     private suspend fun touch(themeId: Long) {
-        val t = db.themes().get(themeId) ?: return
+        val t = syncBasePack(db.themes().get(themeId) ?: return)
         val c = coverage(themeId)
         db.themes().update(t.copy(updatedAt = System.currentTimeMillis(), totalApps = c.total, themedApps = c.themed, coverage = c.fraction))
     }

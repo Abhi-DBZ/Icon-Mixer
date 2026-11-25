@@ -77,17 +77,17 @@ class IconLoader(private val context: Context, private val packs: IconPacks, pri
         override fun sizeOf(key: String, value: Bitmap) = value.allocationByteCount / 1024
     }
 
-    private fun cacheKey(src: IconSrc, sizePx: Int, shape: IconShape) =
-        "${src.key}@$sizePx#${shape.name}${if (settings.shapeAllIcons.value) "+all" else ""}"
+    private fun cacheKey(src: IconSrc, sizePx: Int, shape: IconShape, night: Boolean?) =
+        "${src.key}@$sizePx#${shape.name}${if (settings.shapeAllIcons.value) "+all" else ""}~$night"
 
-    fun peek(src: IconSrc, sizePx: Int, shape: IconShape = IconShape.DEFAULT): Bitmap? = cache.get(cacheKey(src, sizePx, shape))
+    fun peek(src: IconSrc, sizePx: Int, shape: IconShape = IconShape.DEFAULT, night: Boolean? = null): Bitmap? =
+        cache.get(cacheKey(src, sizePx, shape, night))
 
-    suspend fun bitmap(src: IconSrc, sizePx: Int, shape: IconShape = IconShape.DEFAULT): Bitmap? {
-        val ck = cacheKey(src, sizePx, shape)
+    /** [night]: draw pack icons in light/dark mode (null = the phone's current mode). */
+    suspend fun bitmap(src: IconSrc, sizePx: Int, shape: IconShape = IconShape.DEFAULT, night: Boolean? = null): Bitmap? {
+        val ck = cacheKey(src, sizePx, shape, night)
         cache.get(ck)?.let { return it }
-        return withContext(Dispatchers.IO) {
-            runCatching { render(src, sizePx, shape) }.getOrNull()?.also { cache.put(ck, it) }
-        }
+        return withContext(Dispatchers.IO) { renderForExport(src, sizePx, shape, night)?.also { cache.put(ck, it) } }
     }
 
     /** Light/dark mode forced for the render running on this thread (null = phone's current mode). */

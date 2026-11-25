@@ -31,6 +31,9 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
+import androidx.compose.material.icons.outlined.MoreVert
+import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.ListItem
@@ -222,38 +225,40 @@ private fun PackCard(
         val matched = apps.mapNotNull { app -> pack.match(app.packageName, app.activityName)?.let { IconSrc.Pack(p.packageName, it) } }
         value = Coverage(apps.size, matched.size) to matched.distinctBy { it.drawable }.take(8)
     }
-    ElevatedCard(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 6.dp)) {
-        Column(Modifier.padding(16.dp)) {
+    var menu by remember { mutableStateOf(false) }
+    ElevatedCard(onClick = { menu = true }, modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp)) {
+        Column(Modifier.padding(start = 12.dp, end = 4.dp, top = 10.dp, bottom = 10.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                IconImage(IconSrc.App(p.packageName, ""), 48.dp)
-                Gap(w = 12.dp)
+                IconImage(IconSrc.App(p.packageName, ""), 36.dp)
+                Gap(w = 10.dp)
                 Column(Modifier.weight(1f)) {
-                    Text(p.label, style = MaterialTheme.typography.titleMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    Text(p.label, style = MaterialTheme.typography.titleSmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
                     Text(
-                        listOfNotNull(p.author.ifBlank { null }, "${p.totalIcons} icons", if (isBase) "base of active theme" else null).joinToString(" · "),
-                        style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        listOfNotNull("${p.totalIcons} icons", info?.first?.let { "${it.themed}/${it.total} apps" },
+                            if (isBase) "active theme" else null).joinToString(" · "),
+                        style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = 1, overflow = TextOverflow.Ellipsis,
                     )
                 }
                 info?.first?.let { c ->
-                    Column(horizontalAlignment = Alignment.End) {
-                        Text("${c.percent}%", style = MaterialTheme.typography.titleLarge)
-                        Text("${c.themed}/${c.total} apps", style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text("${c.percent}%", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.primary)
+                }
+                Box {
+                    IconButton(onClick = { menu = true }) { Icon(Icons.Outlined.MoreVert, "Actions for ${p.label}") }
+                    DropdownMenu(menu, { menu = false }) {
+                        DropdownMenuItem(text = { Text("New theme from this pack") }, onClick = { menu = false; onNewTheme() })
+                        if (hasTheme) {
+                            DropdownMenuItem(text = { Text("Fill missing icons") }, onClick = { menu = false; onFill() })
+                            DropdownMenuItem(text = { Text("Apply to the whole theme") }, onClick = { menu = false; onApply() })
+                            if (!isBase) DropdownMenuItem(text = { Text("Make it the theme's pack") }, onClick = { menu = false; onMakeBase() })
+                        }
                     }
                 }
             }
             val preview = info?.second
-            Row(Modifier.fillMaxWidth().padding(vertical = 12.dp), horizontalArrangement = Arrangement.SpaceBetween) {
-                if (preview == null) repeat(8) { IconImage(null, 36.dp) }
-                else preview.forEach { IconImage(it, 36.dp) }
-            }
-            Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                FilledTonalButton(onClick = onNewTheme) { Text("New theme") }
-                if (hasTheme) {
-                    OutlinedButton(onClick = onFill) { Text("Fill missing") }
-                    OutlinedButton(onClick = onApply) { Text("Apply all") }
-                    if (!isBase) OutlinedButton(onClick = onMakeBase) { Text("Make base") }
-                }
+            Row(Modifier.fillMaxWidth().padding(top = 8.dp, end = 8.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                if (preview == null) repeat(8) { IconImage(null, 28.dp) }
+                else preview.forEach { IconImage(it, 28.dp) }
             }
         }
     }
