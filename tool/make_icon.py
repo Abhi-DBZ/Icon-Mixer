@@ -9,7 +9,7 @@ import os
 
 RES = os.path.join(os.path.dirname(__file__), "..", "app", "src", "main", "res", "drawable")
 
-BG = "#FFE3E8FF"
+BG = "#00000000"   # transparent: no background plate (option B, approved 2026-11-25)
 TILES = ["#FF2B3A9E", "#FF5468DC", "#FF8C9BF2"]   # top-left, top-right, bottom-left
 SPARKLE = "#FFFF7A59"
 N = 4.5          # squircle exponent
