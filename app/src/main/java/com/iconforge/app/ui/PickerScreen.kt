@@ -202,7 +202,7 @@ fun PickerScreen(main: MainViewModel, nav: NavHostController, themeId: Long, key
                     state = gridState,
                     columns = GridCells.Adaptive(68.dp),
                     modifier = Modifier.fillMaxSize(),
-                    contentPadding = PaddingValues(start = 12.dp, end = if (sections.size > 1) 52.dp else 12.dp, bottom = 24.dp),
+                    contentPadding = PaddingValues(start = 12.dp, end = if (sections.size > 1) 30.dp else 12.dp, bottom = 24.dp),
                 ) {
                     // Icons other packs have for exactly this app
                     if (showExact) {
@@ -251,8 +251,8 @@ fun PickerScreen(main: MainViewModel, nav: NavHostController, themeId: Long, key
                         letters = letters,
                         current = touchLetter ?: current,
                         touched = touchLetter,
-                        // Kept off the edge: curved screens (e.g. OnePlus 12) ignore touches on the
-                        // curve, and the edge is also where the back gesture starts.
+                        // Letters sit at the edge as before; the touch area reaches further in, as
+                        // curved screens (e.g. OnePlus 12) ignore touches on the curve itself.
                         modifier = Modifier.align(Alignment.CenterEnd).padding(end = RAIL_EDGE)
                             .systemGestureExclusion()
                             .onSizeChanged { railSize = it },
@@ -420,7 +420,10 @@ private fun AdjustSheet(base: IconSrc?, scale0: Float, bg0: Int?, shape: IconSha
 }
 
 /** Gap between the A–Z rail and the screen edge. */
-private val RAIL_EDGE = 10.dp
+private val RAIL_EDGE = 2.dp
+
+/** How far left of the letters the A–Z rail still reacts to touch (invisible). */
+private val RAIL_REACH = 26.dp
 
 /**
  * A–Z index on the right edge: touch or slide along it to jump to a letter. Reports the
@@ -455,7 +458,7 @@ private fun LetterRail(
                     last = null; onTouch(null, null)
                 }
             }
-            .padding(vertical = 4.dp, horizontal = 12.dp),     // wide touch area
+            .padding(start = RAIL_REACH, end = 4.dp, top = 4.dp, bottom = 4.dp),   // touchable to the left of the letters
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
         letters.forEach { l ->
