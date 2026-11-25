@@ -12,7 +12,7 @@ import org.json.JSONObject
  * one request to api.github.com for the latest release, and the APK download when you accept.
  */
 object Updater {
-    const val REPO = "Abhi-DBZ/IconMixer"
+    const val REPO = "Abhi-DBZ/Icon-Mixer"
     const val PAGE = "https://github.com/$REPO"
 
     data class Release(val version: String, val notes: String, val apkUrl: String, val apkSize: Long, val page: String)
