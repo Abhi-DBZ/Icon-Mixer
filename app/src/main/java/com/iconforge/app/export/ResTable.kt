@@ -236,6 +236,68 @@ class SourceRes(private val apks: List<File>) : AutoCloseable {
     }
 }
 
+/** Reads compiled XML back into a tree (namespaces, element tree with typed attributes). */
+fun parseAxml(bytes: ByteArray): Pair<List<Pair<String, String>>, XNode> {
+    val le = Le(bytes)
+    require(bytes.size >= 8 && le.u16(0) == 0x0003) { "not compiled xml" }
+    var strings: List<String> = emptyList()
+    var resIds = IntArray(0)
+    val namespaces = ArrayList<Pair<String, String>>()
+    class Open(val name: String, val attrs: List<XAttr>) { val children = ArrayList<XNode>() }
+    val stack = ArrayList<Open>()
+    var root: XNode? = null
+    var c = le.u16(2)
+    while (c + 8 <= bytes.size) {
+        val type = le.u16(c); val size = le.u32(c + 4)
+        if (size <= 0) break
+        when (type) {
+            0x0001 -> strings = readStringPool(le, c)
+            0x0180 -> resIds = IntArray((size - 8) / 4) { le.u32(c + 8 + 4 * it) }
+            0x0100 -> namespaces += strings[le.u32(c + 16)] to strings[le.u32(c + 20)]
+            0x0102 -> {
+                val attrStart = le.u16(c + 24); val attrSize = le.u16(c + 26); val count = le.u16(c + 28)
+                val attrs = List(count) { i ->
+                    val a = c + 16 + attrStart + i * attrSize
+                    val ns = le.u32(a).takeIf { it != -1 }?.let { strings[it] }
+                    val nameIdx = le.u32(a + 4)
+                    val dt = le.u8(a + 15); val data = le.u32(a + 16)
+                    XAttr(ns, strings[nameIdx], resIds.getOrElse(nameIdx) { 0 }, dt, data,
+                        if (dt == 0x03) strings.getOrNull(data) else null)
+                }
+                stack += Open(strings[le.u32(c + 20)], attrs)
+            }
+            0x0103 -> {
+                val o = stack.removeAt(stack.size - 1)
+                val node = XNode(o.name, o.attrs, o.children)
+                if (stack.isEmpty()) root = node else stack.last().children += node
+            }
+        }
+        c += size
+    }
+    return namespaces to (root ?: error("empty xml"))
+}
+
+/** Icon shapes as SVG path data on a 100 × 100 canvas (same shapes as IconShape). */
+object ShapePaths {
+    fun svg(shape: String): String? = when (shape) {
+        "CIRCLE" -> "M50,0A50,50 0,1 1,50,100A50,50 0,1 1,50,0Z"
+        "SQUARE" -> "M0,0H100V100H0Z"
+        "ROUNDED" -> "M22,0H78A22,22 0,0 1,100,22V78A22,22 0,0 1,78,100H22A22,22 0,0 1,0,78V22A22,22 0,0 1,22,0Z"
+        "TEARDROP" -> "M50,0A50,50 0,0 1,100,50V88A12,12 0,0 1,88,100H50A50,50 0,0 1,0,50A50,50 0,0 1,50,0Z"
+        "SQUIRCLE" -> buildString {
+            // superellipse |x|^4 + |y|^4 = 1
+            for (i in 0 until 360 step 3) {
+                val t = Math.toRadians(i.toDouble()); val c = Math.cos(t); val s = Math.sin(t)
+                val x = 50 + 50 * Math.signum(c) * Math.pow(Math.abs(c), 0.5)
+                val y = 50 + 50 * Math.signum(s) * Math.pow(Math.abs(s), 0.5)
+                append(if (i == 0) "M" else "L").append("%.2f,%.2f".format(java.util.Locale.ROOT, x, y))
+            }
+            append("Z")
+        }
+        else -> null                                     // DEFAULT: the launcher decides
+    }
+}
+
 // ====================================================================== copying
 
 data class LiveKey(val type: String, val name: String)
@@ -297,15 +359,24 @@ class LiveCopier(private val src: SourceRes, packageName: String) {
     private val prefix = "lv" + Integer.toHexString(packageName.hashCode() and 0xFFFFFF) + "_"
     private val fileTypes = setOf("drawable", "mipmap", "color", "xml", "anim", "animator", "interpolator")
 
-    /** Copies [drawable] into [into] under the appfilter name [alias]. False = not XML / not copyable. */
-    fun collect(drawable: String, alias: String, into: LiveBundle, allowAdaptive: Boolean = true): Boolean {
+    /** Shape (SVG path, 100 × 100) adaptive icons are being rewritten into during [collect]. */
+    private var reshape: String? = null
+
+    /**
+     * Copies [drawable] into [into] under the appfilter name [alias]. False = not XML / not copyable.
+     *
+     * [shape] (from [ShapePaths]; null = launcher default): the launcher picks the shape of
+     * adaptive icons itself, so with a theme shape they are rewritten into ordinary drawables
+     * already cut to that shape — still live, as the colours stay references. [shapeAll]: plain
+     * (non-adaptive) XML icons should be cut too, which can't stay live, so they are refused.
+     */
+    fun collect(drawable: String, alias: String, into: LiveBundle, shape: String? = null, shapeAll: Boolean = false): Boolean {
         val id = src.id("drawable", drawable) ?: src.id("mipmap", drawable) ?: return false
         val xmlFiles = src.values[id].orEmpty().mapNotNull { v -> v.str?.takeIf { it.endsWith(".xml") } }
         if (xmlFiles.isEmpty()) return false
-        // The launcher picks the shape of adaptive icons itself; with a fixed theme shape they
-        // must be drawn as pictures in that shape instead.
-        if (!allowAdaptive && xmlFiles.any { f -> src.file(f)?.let { rootTag(it) } == "adaptive-icon" }) return false
+        if (shape != null && shapeAll && xmlFiles.any { f -> src.file(f)?.let { rootTag(it) } != "adaptive-icon" }) return false
         val tmp = LiveBundle()
+        reshape = shape
         return try {
             val key = copy(id, tmp, into)
             tmp.aliases[alias] = key
@@ -315,7 +386,64 @@ class LiveCopier(private val src: SourceRes, packageName: String) {
             false
         } catch (_: RuntimeException) {
             false
+        } finally {
+            reshape = null
         }
+    }
+
+    /**
+     * Rewrites an adaptive icon into a layer list the launcher draws as it is:
+     *   1. the background colour filling [shape] (a vector, so colour references stay live);
+     *   2. the foreground, enlarged by a -25% inset so its visible 72/108 middle fills the icon
+     *      (exactly what an adaptive icon shows inside the launcher's mask).
+     * Only colour backgrounds are supported; anything else stays a picture.
+     */
+    private fun reshapeAdaptive(bytes: ByteArray, shape: String): ByteArray {
+        val (_, root) = parseAxml(bytes)
+        val bg = root.children.firstOrNull { it.name == "background" }
+        val fg = root.children.firstOrNull { it.name == "foreground" } ?: throw Unsupported("no foreground")
+        val ns = AndroidAttr.NS
+        val items = ArrayList<XNode>()
+        if (bg != null) {
+            val colour = bg.attrs.firstOrNull { it.resId == ATTR_DRAWABLE }
+                ?: bg.children.singleOrNull { it.name == "color" }?.attrs?.firstOrNull { it.resId == ATTR_COLOR }
+                ?: throw Unsupported("background is not a colour")
+            if (!isColour(colour)) throw Unsupported("background is not a colour")
+            val dp108 = (108 shl 8) or 0x01                                   // complex dimension, dip
+            val f100 = java.lang.Float.floatToRawIntBits(100f)
+            items += XNode("item", children = listOf(XNode("vector", listOf(
+                XAttr(ns, "width", 0x01010159, 0x05, dp108, null), XAttr(ns, "height", 0x01010155, 0x05, dp108, null),
+                XAttr(ns, "viewportWidth", 0x01010402, 0x04, f100, null), XAttr(ns, "viewportHeight", 0x01010403, 0x04, f100, null),
+            ), listOf(XNode("path", listOf(
+                XAttr(ns, "fillColor", 0x01010404, colour.type, colour.data, colour.str),
+                XAttr(ns, "pathData", 0x01010405, 0x03, 0, shape),
+            ))))))
+        }
+        val minus25 = ((-(1 shl 21)) shl 8) or 0x30                           // complex fraction -25%, radix 0p23
+        val insetAttrs = listOf(XAttr(ns, "inset", 0x010104b5, 0x06, minus25, null)) +
+            fg.attrs.filter { it.resId == ATTR_DRAWABLE }.map { XAttr(ns, "drawable", ATTR_DRAWABLE, it.type, it.data, it.str) }
+        items += XNode("item", children = listOf(XNode("inset", insetAttrs, fg.children)))
+        return encodeAxml(XNode("layer-list", children = items), listOf("android" to ns))
+    }
+
+    /** A colour value, or a reference to a colour (framework palette or the pack's own). */
+    private fun isColour(a: XAttr): Boolean = when (a.type) {
+        in 0x1c..0x1f -> true
+        0x01, 0x07 -> when (a.data ushr 24) {
+            0x01 -> (a.data ushr 16) and 0xFF == 0x06                         // @android:color/…
+            0x7f -> when (src.names[a.data]?.first) {
+                "color" -> true
+                "drawable" -> src.values[a.data].orEmpty().let { v -> v.isNotEmpty() && v.all { it.type in 0x1c..0x1f } }
+                else -> false
+            }
+            else -> false
+        }
+        else -> false
+    }
+
+    private companion object {
+        const val ATTR_DRAWABLE = 0x01010199
+        const val ATTR_COLOR = 0x010101a5
     }
 
     /** Name of the first element of compiled XML (e.g. "adaptive-icon", "vector"). */
@@ -338,7 +466,9 @@ class LiveCopier(private val src: SourceRes, packageName: String) {
 
     private fun keyOf(id: Int): LiveKey {
         val (type, _) = src.names[id] ?: throw Unsupported("unknown id ${Integer.toHexString(id)}")
-        return LiveKey(type, prefix + Integer.toHexString(id))
+        // Shaped copies get their own names, so a shaped and a plain copy can't be mixed up.
+        val shapeTag = reshape?.let { "s" + Integer.toHexString(it.hashCode() and 0xFFFF) + "_" } ?: ""
+        return LiveKey(type, prefix + shapeTag + Integer.toHexString(id))
     }
 
     private fun copy(id: Int, b: LiveBundle, done: LiveBundle): LiveKey {
@@ -367,7 +497,10 @@ class LiveCopier(private val src: SourceRes, packageName: String) {
         val bytes = src.file(path) ?: throw Unsupported("missing $path")
         val ext = path.substringAfterLast('.', "bin")
         val out = "res/lv/${key.name}_$index.$ext"
-        b.files[out] = if (ext == "xml") rewriteXml(bytes, b, done) else bytes
+        b.files[out] = if (ext == "xml") {
+            val shape = reshape
+            rewriteXml(if (shape != null && rootTag(bytes) == "adaptive-icon") reshapeAdaptive(bytes, shape) else bytes, b, done)
+        } else bytes
         return out
     }
 

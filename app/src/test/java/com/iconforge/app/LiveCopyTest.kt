@@ -7,6 +7,7 @@ import com.iconforge.app.export.PackIcon
 import com.iconforge.app.export.PackMapping
 import com.iconforge.app.export.PackSpec
 import com.iconforge.app.export.PackCalendar
+import com.iconforge.app.export.ShapePaths
 import com.iconforge.app.export.SourceRes
 import java.io.File
 import java.util.Properties
@@ -47,6 +48,39 @@ class LiveCopyTest {
         javax.imageio.ImageIO.write(java.awt.image.BufferedImage(8, 8, java.awt.image.BufferedImage.TYPE_INT_ARGB), "png", it)
     }.toByteArray()
 
+    /** Optional, local only: reshape every icon of a real pack (set ICONMIXER_REAL_PACK to its APK). */
+    @Test
+    fun reshapesRealPack() {
+        val apk = System.getenv("ICONMIXER_REAL_PACK")?.let { File(it) }
+        Assume.assumeTrue("ICONMIXER_REAL_PACK not set", apk?.isFile == true)
+        val sdk = sdkDir()!!
+        val aapt2 = File(sdk, "build-tools").listFiles()!!.maxBy { it.name }.let { File(it, if (File(it, "aapt2.exe").exists()) "aapt2.exe" else "aapt2") }.path
+        val bundle = LiveBundle()
+        val maps = ArrayList<PackMapping>()
+        var tried = 0; var ok = 0
+        SourceRes(listOf(apk!!)).use { src ->
+            val copier = LiveCopier(src, "real.pack")
+            val drawables = src.names.values.filter { it.first == "drawable" }.map { it.second }.distinct().take(400)
+            drawables.forEachIndexed { i, d ->
+                tried++
+                if (copier.collect(d, "r$i", bundle, shape = ShapePaths.svg("CIRCLE"))) { ok++; maps += PackMapping("p$i.app", "p$i.app.Main", "r$i") }
+            }
+        }
+        println("reshaped $ok of $tried drawables")
+        val png = java.io.ByteArrayOutputStream().also {
+            javax.imageio.ImageIO.write(java.awt.image.BufferedImage(8, 8, java.awt.image.BufferedImage.TYPE_INT_ARGB), "png", it)
+        }.toByteArray()
+        val out = File(root, "app/build/livetest/real.apk").apply { parentFile.mkdirs() }
+        ApkBuilder.buildUnsigned(PackSpec(packageName = "com.iconforge.pack.real", label = "Real", versionCode = 1, versionName = "1",
+            icons = listOf(PackIcon("static_icon", png)), mappings = maps, appIconRes = "static_icon", calendars = emptyList(), live = bundle), out)
+        val dump = run(aapt2, "dump", "resources", out.path)
+        val first = Regex("""(res/lv/\S+\.xml)""").findAll(dump).map { it.value }.first { p ->
+            run(aapt2, "dump", "xmltree", "--file", p, out.path).contains("E: layer-list")
+        }
+        println(run(aapt2, "dump", "xmltree", "--file", first, out.path))
+        assertTrue(ok > tried / 2)
+    }
+
     @Test
     fun copiesMaterialYouIcon() {
         val sdk = sdkDir()
@@ -81,6 +115,24 @@ class LiveCopyTest {
                 <background android:drawable="@color/bg" />
                 <foreground android:drawable="@drawable/glyph" />
             </adaptive-icon>""".trimIndent())
+        // Arcticons-style: inline foreground (layer-list > item > inset > vector).
+        write(res, "drawable-anydpi-v26/phone.xml", """
+            <adaptive-icon xmlns:android="http://schemas.android.com/apk/res/android">
+                <background android:drawable="@color/bg" />
+                <foreground>
+                    <layer-list><item><inset android:inset="25%">
+                        <vector android:width="48dp" android:height="48dp" android:viewportWidth="48" android:viewportHeight="48">
+                            <path android:fillColor="#00000000" android:strokeColor="@color/fg" android:strokeWidth="1.2" android:pathData="M10,10L38,38" />
+                        </vector>
+                    </inset></item></layer-list>
+                </foreground>
+            </adaptive-icon>""".trimIndent())
+        // A picture background can't be cut to a shape while staying live.
+        write(res, "drawable-anydpi-v26/photo_bg.xml", """
+            <adaptive-icon xmlns:android="http://schemas.android.com/apk/res/android">
+                <background android:drawable="@drawable/plain" />
+                <foreground android:drawable="@drawable/glyph" />
+            </adaptive-icon>""".trimIndent())
         File(res, "drawable-nodpi").mkdirs(); File(res, "drawable-nodpi/plain.png").writeBytes(png)
         val manifest = write(work, "AndroidManifest.xml",
             """<manifest xmlns:android="http://schemas.android.com/apk/res/android" package="com.example.mypack"><uses-sdk android:minSdkVersion="26" /></manifest>""")
@@ -98,10 +150,15 @@ class LiveCopyTest {
                 val copier = LiveCopier(src, "com.example.mypack")
                 assertTrue("adaptive icon should copy ($extra)", copier.collect("camera", "camera_live", bundle))
                 assertFalse("bitmap icons stay rasterised", copier.collect("plain", "plain_live", bundle))
-                // With a fixed icon shape, adaptive icons are drawn as pictures; plain vectors stay live.
-                val shaped = LiveBundle()
-                assertFalse("adaptive refused with a shape", copier.collect("camera", "c2", shaped, allowAdaptive = false))
-                assertTrue("vector still live with a shape", copier.collect("glyph", "g2", shaped, allowAdaptive = false))
+                // With a theme shape, adaptive icons are rewritten already cut to it; plain vectors
+                // stay live unless every icon must be shaped.
+                val circle = ShapePaths.svg("CIRCLE")
+                assertTrue("adaptive reshaped", copier.collect("camera", "camera_round", bundle, shape = circle))
+                assertTrue("inline foreground reshaped", copier.collect("phone", "phone_round", bundle, shape = circle))
+                assertFalse("picture background stays a picture", copier.collect("photo_bg", "p2", LiveBundle(), shape = circle))
+                assertTrue("vector live with a shape", copier.collect("glyph", "g2", LiveBundle(), shape = circle))
+                assertFalse("vector refused when every icon is shaped", copier.collect("glyph", "g3", LiveBundle(), shape = circle, shapeAll = true))
+                assertTrue("adaptive fine when every icon is shaped", copier.collect("camera", "c3", LiveBundle(), shape = circle, shapeAll = true))
             }
             val spec = PackSpec(
                 packageName = "com.iconforge.pack.livetest", label = "Live test", versionCode = 1, versionName = "1",
@@ -131,6 +188,7 @@ class LiveCopyTest {
             val adaptive = Regex("""(res/lv/\S+\.xml)""").findAll(dump).map { it.value }.toList()
             assertTrue(dump, adaptive.isNotEmpty())
             var sawAdaptive = false
+            var shaped = 0
             adaptive.distinct().forEach { path ->
                 val tree = run(aapt2, "dump", "xmltree", "--file", path, out.path)
                 assertFalse("no dangling refs to the source pack\n$tree", tree.contains("@0x7f") && !tree.contains("@0x7f0"))
@@ -138,8 +196,18 @@ class LiveCopyTest {
                     sawAdaptive = true
                     assertTrue(tree, tree.contains("background") && tree.contains("foreground"))
                 }
+                if (tree.contains("E: layer-list") && tree.contains("M50,0A50,50")) {
+                    shaped++
+                    // circle filled with the (live) background colour + foreground enlarged by -25%
+                    assertTrue(tree, Regex("""fillColor\(0x01010404\)=@0x7f""").containsMatchIn(tree))
+                    // -25% (0xe0000030, same bytes aapt2 writes for "-25%"; its dump shows it as 1.75%)
+                    assertTrue(tree, tree.contains("inset(0x010104b5)=1.750000%"))
+                }
             }
             assertTrue(sawAdaptive)
+            // camera + phone, each in day and night files
+            assertTrue("shaped copies: $shaped\n$dump", shaped >= 2)
+            assertTrue(dump, dump.contains("drawable/camera_round") && dump.contains("drawable/phone_round"))
             val appfilter = run(aapt2, "dump", "xmltree", "--file", "res/xml/appfilter.xml", out.path)
             assertTrue(appfilter, appfilter.contains("calendar") && appfilter.contains("cal_x_"))
             assertEquals(true, out.length() > 0)

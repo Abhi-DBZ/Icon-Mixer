@@ -236,7 +236,7 @@ fun ExportScreen(nav: NavHostController, themeId: Long) {
                     val live by vm.settings.liveColours.collectAsState()
                     SwitchRow(
                         "Live Material You colours",
-                        if (t.iconShape != "DEFAULT") "Experimental · adaptive icons use the shape instead"
+                        if (t.iconShape != "DEFAULT") "Experimental · follow your wallpaper, in your shape"
                         else "Experimental · icons follow your wallpaper colours",
                         live,
                     ) { vm.settings.setLiveColours(it) }

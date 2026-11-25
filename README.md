@@ -51,7 +51,7 @@ apps" when Android asks). Android 8.0 or newer.
 - **Adjust icons**: size and a coloured background plate, so icons from different packs blend.
 - **Home-screen preview** on your wallpaper colours (or a photo), with missing icons highlighted.
 - **Live Material You colours (experimental)**: icons from packs like Pix Material You keep
-  following your wallpaper in the exported pack.
+  following your wallpaper in the exported pack, also in a chosen shape (e.g. circle on ColorOS).
 - **Calendar icons** that show today's date, when the source pack has them.
 - **Light / dark icons**: packs with separate dark-mode icons keep both; your launcher switches with the phone's theme.
 - **In-app updates** from GitHub releases (Settings → App updates).
@@ -78,7 +78,8 @@ installed pack updates.
 ## Good to know
 
 - Exported icons are images, except with **Live Material You colours** turned on: then icons
-  from Material You packs stay live (shape and size adjustments don't apply to those).
+  from Material You packs stay live, cut to the theme's shape when one is chosen. Icons you
+  adjusted, generated or picked from your gallery stay images.
 - Exported packs are signed with a key created on your phone. If you reinstall Icon Mixer or
   clear its data, uninstall packs exported earlier before installing new ones.
 - Private by design: no accounts, no analytics. The only network access is checking GitHub for

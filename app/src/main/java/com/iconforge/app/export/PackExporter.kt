@@ -178,7 +178,9 @@ class PackExporter(
             liveBySource[k]?.let { return it }
             val c = copier(pack) ?: return null
             val name = unique(base)
-            return if (c.collect(drawable, name, bundle, allowAdaptive = shape == com.iconforge.app.core.IconShape.DEFAULT)) name.also { liveBySource[k] = it } else { names.remove(name); null }
+            // With a theme shape, adaptive icons are rewritten already cut to it (still live).
+            val ok = c.collect(drawable, name, bundle, shape = ShapePaths.svg(shape.name), shapeAll = settings.shapeAllIcons.value)
+            return if (ok) name.also { liveBySource[k] = it } else { names.remove(name); null }
         }
 
         maps.forEachIndexed { i, m ->
@@ -191,9 +193,8 @@ class PackExporter(
                 Source.CUSTOM -> "custom_" + ApkBuilder.resName(m.packageName)
                 else -> "app_" + ApkBuilder.resName(m.packageName)
             }
-            // Every icon cut to a shape can't stay live (the shape is drawn into the picture).
-            val canLive = forApk && live && m.source == Source.PACK && m.scale == 1f && m.bgColor == null &&
-                !(settings.shapeAllIcons.value && shape != com.iconforge.app.core.IconShape.DEFAULT)
+            // Pack icons only; adjusted ones (size / plate) are pictures.
+            val canLive = forApk && live && m.source == Source.PACK && m.scale == 1f && m.bgColor == null
             val res = (if (canLive) addLive(m, base) else null) ?: addIcon(src, base) ?: return@forEachIndexed
             if (previews.size < 4) previews += src
             val cls = m.componentKey.substringAfter('/')
