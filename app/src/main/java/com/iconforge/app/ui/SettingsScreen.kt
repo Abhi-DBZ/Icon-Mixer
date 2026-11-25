@@ -19,7 +19,6 @@ import androidx.compose.material.icons.outlined.Autorenew
 import androidx.compose.material.icons.outlined.BrightnessAuto
 import androidx.compose.material.icons.outlined.Contrast
 import androidx.compose.material.icons.outlined.DarkMode
-import androidx.compose.material.icons.outlined.Description
 import androidx.compose.material.icons.outlined.Info
 import androidx.compose.material.icons.outlined.LightMode
 import androidx.compose.material.icons.outlined.NotificationsActive
@@ -27,7 +26,6 @@ import androidx.compose.material.icons.outlined.Palette
 import androidx.compose.material.icons.outlined.SystemUpdate
 import androidx.compose.material.icons.outlined.Update
 import androidx.compose.material.icons.outlined.AppShortcut
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ElevatedCard
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -69,7 +67,6 @@ fun SettingsScreen(vm: MainViewModel) {
     val autoUpdate by s.autoUpdatePack.collectAsState()
     val autoCheck by s.autoUpdateCheck.collectAsState()
     val update by vm.update.collectAsState()
-    var licences by remember { mutableStateOf(false) }
     val version = remember { runCatching { ctx.packageManager.getPackageInfo(ctx.packageName, 0).versionName }.getOrNull() ?: "?" }
 
     Scaffold(topBar = { TopAppBar(title = { Text("Settings") }) }) { pad ->
@@ -151,38 +148,14 @@ fun SettingsScreen(vm: MainViewModel) {
                 Link(Icons.AutoMirrored.Outlined.OpenInNew, "Source code on GitHub", Updater.PAGE) {
                     ctx.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(Updater.PAGE)))
                 }
-                Link(Icons.Outlined.Description, "Open-source licences", "Libraries Icon Mixer is built with") { licences = true }
                 Link(Icons.Outlined.AppShortcut, "Exported packs",
                     "Signed with a key kept on this phone. After reinstalling Icon Mixer, remove old packs before installing new ones.") {}
             }
         }
     }
 
-    if (licences) AlertDialog(
-        onDismissRequest = { licences = false },
-        title = { Text("Open-source licences") },
-        text = {
-            Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                OPEN_SOURCE.forEach { (name, licence) ->
-                    Column {
-                        Text(name, style = MaterialTheme.typography.bodyMedium)
-                        Text(licence, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    }
-                }
-            }
-        },
-        confirmButton = { TextButton(onClick = { licences = false }) { Text("Close") } },
-    )
 }
 
-/** Libraries shipped inside the app (see THIRD_PARTY_NOTICES.md in the repository). */
-private val OPEN_SOURCE = listOf(
-    "Jetpack Compose, Material 3, AndroidX (Activity, Lifecycle, Navigation, Room, WorkManager, Core)" to "Apache License 2.0 · The Android Open Source Project",
-    "Material Icons" to "Apache License 2.0 · Google",
-    "apksig" to "Apache License 2.0 · The Android Open Source Project",
-    "Kotlin standard library, kotlinx.coroutines" to "Apache License 2.0 · JetBrains",
-    "MaterialKolor" to "MIT License · Jordon de Hoog",
-)
 
 /** A titled card with an icon. */
 @Composable

@@ -72,10 +72,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     private val _scanned = MutableStateFlow(false)
     val scanned: StateFlow<Boolean> = _scanned
 
-    init {
-        refresh(first = true)
-        if (a.settings.autoUpdateCheck.value && System.currentTimeMillis() - a.settings.lastUpdateCheck > 24 * 3_600_000L) checkForUpdate(manual = false)
-    }
+    init { refresh(first = true) }
 
     // ------------------------------------------------------------ app updates (GitHub releases)
 
@@ -90,6 +87,14 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     private val _update = MutableStateFlow<Update>(Update.Idle)
     val update: StateFlow<Update> = _update
+
+    // Must come after _update: Kotlin runs initialisers top to bottom, and the check
+    // starts immediately (it crashed 1.10 on first launch when this ran earlier).
+    init {
+        if (a.settings.autoUpdateCheck.value && System.currentTimeMillis() - a.settings.lastUpdateCheck > 24 * 3_600_000L) {
+            checkForUpdate(manual = false)
+        }
+    }
 
     private val appVersion: String get() =
         runCatching { a.packageManager.getPackageInfo(a.packageName, 0).versionName }.getOrNull() ?: "0"
@@ -324,7 +329,6 @@ class PickerViewModel(application: Application, val themeId: Long, val keys: Lis
 
     init {
         viewModelScope.launch {
-            val t = a.db.themes().get(themeId)
             val ps = a.db.packs().all()
             // Open on the theme's own pack (the one its icons come from), not the first alphabetically.
             val own = a.repo.themePack(themeId)
