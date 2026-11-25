@@ -10,6 +10,19 @@ Built with ColorOS / OxygenOS in mind (their launchers accept icon packs but off
 fix the gaps in bulk), and meant for any launcher that supports icon packs: Nova, Lawnchair,
 Smart Launcher, Niagara, Good Lock Theme Park on One UI, and others.
 
+## Screenshots
+
+<p align="center">
+  <img src="screenshots/home.png" width="250" alt="Themes: the active theme with coverage, Auto-fill, Fix and Export">
+  <img src="screenshots/editor.png" width="250" alt="Theme editor: every app with its themed icon">
+  <img src="screenshots/picker.png" width="250" alt="Icon picker: icons from any installed pack, with A–Z scrolling">
+</p>
+<p align="center">
+  <img src="screenshots/packs.png" width="250" alt="Installed icon packs and how much of the phone each one covers">
+  <img src="screenshots/export.png" width="250" alt="Export: build an installable icon pack, icon shape and size">
+  <img src="screenshots/settings.png" width="250" alt="Settings: theme, colours, new apps and updates">
+</p>
+
 ## Download
 
 Get the latest APK from [Releases](../../releases) and install it (allow "install unknown
