@@ -90,26 +90,34 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     // Must come after _update: Kotlin runs initialisers top to bottom, and the check
     // starts immediately (it crashed 1.10 on first launch when this ran earlier).
-    init {
-        if (a.settings.autoUpdateCheck.value && System.currentTimeMillis() - a.settings.lastUpdateCheck > 24 * 3_600_000L) {
-            checkForUpdate(manual = false)
-        }
-    }
+    init { checkOnOpen() }
 
     private val appVersion: String get() =
         runCatching { a.packageManager.getPackageInfo(a.packageName, 0).versionName }.getOrNull() ?: "0"
 
+    /**
+     * On launch and whenever the app comes back to the screen: look for a new release, at
+     * most every 30 minutes ([force]: now, e.g. from the update notification). A found update
+     * shows as a banner on Home until it's installed.
+     */
+    fun checkOnOpen(force: Boolean = false) {
+        if (!force && !a.settings.autoUpdateCheck.value) return
+        if (_update.value is Update.Checking || _update.value is Update.Downloading) return
+        if (force || System.currentTimeMillis() - a.settings.lastUpdateCheck > 30 * 60_000L) checkForUpdate(manual = false)
+    }
+
     fun checkForUpdate(manual: Boolean) = viewModelScope.launch {
-        _update.value = Update.Checking
+        val before = _update.value
+        // A background check keeps an "available" banner on screen instead of flickering.
+        if (manual || before !is Update.Available) _update.value = Update.Checking
         _update.value = try {
             val r = com.iconforge.app.core.Updater.latest()
             a.settings.lastUpdateCheck = System.currentTimeMillis()
-            if (r != null && com.iconforge.app.core.Updater.isNewer(r.version, appVersion)) {
-                if (!manual) say("Icon Mixer ${r.version} is available", "Update") { installUpdate(r) }
-                Update.Available(r)
-            } else Update.UpToDate
+            if (r != null && com.iconforge.app.core.Updater.isNewer(r.version, appVersion)) Update.Available(r)
+            else Update.UpToDate
         } catch (e: Exception) {
-            if (manual) Update.Failed("Couldn't reach GitHub: ${e.message ?: "no connection"}") else Update.Idle
+            if (manual) Update.Failed("Couldn't reach GitHub: ${e.message ?: "no connection"}")
+            else before.takeIf { it is Update.Available } ?: Update.Idle
         }
     }
 

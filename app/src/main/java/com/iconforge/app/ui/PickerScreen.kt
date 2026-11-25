@@ -10,8 +10,7 @@ import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
-import androidx.compose.ui.layout.onPlaced
-import androidx.compose.ui.layout.positionInParent
+import androidx.compose.foundation.systemGestureExclusion
 import androidx.compose.foundation.layout.offset
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.foundation.gestures.detectVerticalDragGestures
@@ -197,12 +196,13 @@ fun PickerScreen(main: MainViewModel, nav: NavHostController, themeId: Long, key
                 sections.associate { (letter, list) -> letter to i.also { i += 1 + list.size } }
             }
 
-            Box(Modifier.weight(1f).fillMaxWidth()) {
+            var boxHeight by remember { mutableStateOf(0) }
+            Box(Modifier.weight(1f).fillMaxWidth().onSizeChanged { boxHeight = it.height }) {
                 LazyVerticalGrid(
                     state = gridState,
                     columns = GridCells.Adaptive(68.dp),
                     modifier = Modifier.fillMaxSize(),
-                    contentPadding = PaddingValues(start = 12.dp, end = if (sections.size > 1) 28.dp else 12.dp, bottom = 24.dp),
+                    contentPadding = PaddingValues(start = 12.dp, end = if (sections.size > 1) 52.dp else 12.dp, bottom = 24.dp),
                 ) {
                     // Icons other packs have for exactly this app
                     if (showExact) {
@@ -245,15 +245,17 @@ fun PickerScreen(main: MainViewModel, nav: NavHostController, themeId: Long, key
                     val letters = sections.map { it.first }
                     var touchY by remember { mutableStateOf<Float?>(null) }        // finger on the rail (rail px)
                     var touchLetter by remember { mutableStateOf<Char?>(null) }
-                    var railTop by remember { mutableStateOf(0f) }
                     var railSize by remember { mutableStateOf(androidx.compose.ui.unit.IntSize.Zero) }
                     val haptic = androidx.compose.ui.platform.LocalHapticFeedback.current
                     LetterRail(
                         letters = letters,
                         current = touchLetter ?: current,
                         touched = touchLetter,
-                        modifier = Modifier.align(Alignment.CenterEnd).padding(end = 2.dp)
-                            .onPlaced { railTop = it.positionInParent().y; railSize = it.size },
+                        // Kept off the edge: curved screens (e.g. OnePlus 12) ignore touches on the
+                        // curve, and the edge is also where the back gesture starts.
+                        modifier = Modifier.align(Alignment.CenterEnd).padding(end = RAIL_EDGE)
+                            .systemGestureExclusion()
+                            .onSizeChanged { railSize = it },
                         onTouch = { y, l -> touchY = y; touchLetter = l },
                     ) { letter ->
                         haptic.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.TextHandleMove)
@@ -272,7 +274,9 @@ fun PickerScreen(main: MainViewModel, nav: NavHostController, themeId: Long, key
                         modifier = Modifier.align(Alignment.TopEnd).offset {
                             val b = with(density) { bubble.roundToPx() }
                             val gap = with(density) { 10.dp.roundToPx() }
-                            androidx.compose.ui.unit.IntOffset(-(railSize.width + gap), (railTop + y - b).toInt().coerceAtLeast(0))
+                            val edge = with(density) { RAIL_EDGE.roundToPx() }
+                            val railTop = (boxHeight - railSize.height) / 2f            // rail is centred vertically
+                            androidx.compose.ui.unit.IntOffset(-(railSize.width + edge + gap), (railTop + y - b).toInt().coerceAtLeast(0))
                         },
                     ) {
                         // Round on three corners, pointed at the bottom-right (towards the finger).
@@ -415,6 +419,9 @@ private fun AdjustSheet(base: IconSrc?, scale0: Float, bg0: Int?, shape: IconSha
     }
 }
 
+/** Gap between the A–Z rail and the screen edge. */
+private val RAIL_EDGE = 10.dp
+
 /**
  * A–Z index on the right edge: touch or slide along it to jump to a letter. Reports the
  * finger's position ([onTouch], rail px + letter; null on release) for the drop bubble.
@@ -448,7 +455,7 @@ private fun LetterRail(
                     last = null; onTouch(null, null)
                 }
             }
-            .padding(vertical = 4.dp, horizontal = 4.dp),
+            .padding(vertical = 4.dp, horizontal = 12.dp),     // wide touch area
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
         letters.forEach { l ->

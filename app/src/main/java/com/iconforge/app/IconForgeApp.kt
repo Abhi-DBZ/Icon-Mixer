@@ -60,6 +60,7 @@ class IconForgeApp : Application() {
 
         Notifications.createChannel(this)
         NewAppWorker.schedule(this)
+        UpdateCheckWorker.schedule(this)
 
         // While the app process is alive, react to installs immediately.
         getSystemService(LauncherApps::class.java).registerCallback(object : LauncherApps.Callback() {
@@ -155,9 +156,59 @@ class NewAppWorker(ctx: Context, params: WorkerParameters) : CoroutineWorker(ctx
     }
 }
 
+/**
+ * Looks for a new Icon Mixer release on GitHub every few hours (with a network) and posts one
+ * notification per new version. Off with Settings → App updates → check automatically.
+ */
+class UpdateCheckWorker(ctx: Context, params: WorkerParameters) : CoroutineWorker(ctx, params) {
+    override suspend fun doWork(): Result {
+        val app = applicationContext.app
+        if (!app.settings.autoUpdateCheck.value) return Result.success()
+        val r = runCatching { com.iconforge.app.core.Updater.latest() }.getOrNull() ?: return Result.success()
+        val local = runCatching { app.packageManager.getPackageInfo(app.packageName, 0).versionName }.getOrNull() ?: return Result.success()
+        if (com.iconforge.app.core.Updater.isNewer(r.version, local) && app.settings.notifiedUpdate != r.version) {
+            Notifications.appUpdate(app, r.version)
+            app.settings.notifiedUpdate = r.version
+        }
+        return Result.success()
+    }
+
+    companion object {
+        fun schedule(ctx: Context) {
+            WorkManager.getInstance(ctx).enqueueUniquePeriodicWork(
+                "update-check",
+                ExistingPeriodicWorkPolicy.KEEP,
+                PeriodicWorkRequestBuilder<UpdateCheckWorker>(6, TimeUnit.HOURS)
+                    .setConstraints(androidx.work.Constraints.Builder().setRequiredNetworkType(androidx.work.NetworkType.CONNECTED).build())
+                    .build(),
+            )
+        }
+    }
+}
+
 object Notifications {
     private const val CHANNEL = "new_apps"
     private const val CHANNEL_PACK = "pack_updates"
+    private const val CHANNEL_APP = "app_updates"
+
+    /** A new Icon Mixer version is on GitHub; tapping opens the app, where Home offers Update. */
+    fun appUpdate(ctx: Context, version: String) {
+        if (Build.VERSION.SDK_INT >= 33 &&
+            ContextCompat.checkSelfPermission(ctx, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED
+        ) return
+        val tap = Intent(ctx, MainActivity::class.java).apply {
+            flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
+            putExtra(EXTRA_OPEN, "update")
+        }
+        val pi = PendingIntent.getActivity(ctx, 9, tap, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
+        val n = NotificationCompat.Builder(ctx, CHANNEL_APP)
+            .setSmallIcon(R.drawable.ic_notification)
+            .setContentTitle("Icon Mixer $version is available")
+            .setContentText("Tap to open Icon Mixer and update")
+            .setContentIntent(pi).setAutoCancel(true)
+            .build()
+        runCatching { NotificationManagerCompat.from(ctx).notify(1003, n) }
+    }
     const val EXTRA_OPEN = "open"
     const val EXTRA_THEME = "theme"
     const val EXTRA_COMPONENT = "component"
@@ -169,6 +220,10 @@ object Notifications {
         ctx.getSystemService(NotificationManager::class.java).createNotificationChannel(
             NotificationChannel(CHANNEL_PACK, "Icon pack updates", NotificationManager.IMPORTANCE_LOW)
                 .apply { description = "When your installed icon pack is updated with new icons" },
+        )
+        ctx.getSystemService(NotificationManager::class.java).createNotificationChannel(
+            NotificationChannel(CHANNEL_APP, "App updates", NotificationManager.IMPORTANCE_DEFAULT)
+                .apply { description = "When a new version of Icon Mixer is available" },
         )
     }
 

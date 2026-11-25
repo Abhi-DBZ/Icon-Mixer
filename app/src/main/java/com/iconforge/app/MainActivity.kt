@@ -116,7 +116,7 @@ private fun Root(launchIntent: Intent?, consumed: () -> Unit) {
     // Packs or apps may have been installed while we were away.
     var first by remember { mutableStateOf(true) }
     LifecycleResumeEffect(Unit) {
-        if (!first) vm.refreshQuietly()
+        if (!first) { vm.refreshQuietly(); vm.checkOnOpen() }
         first = false
         onPauseOrDispose { }
     }
@@ -136,6 +136,7 @@ private fun Root(launchIntent: Intent?, consumed: () -> Unit) {
         when (i.getStringExtra(Notifications.EXTRA_OPEN)) {
             "picker" -> i.getStringExtra(Notifications.EXTRA_COMPONENT)?.let { nav.navigate(Routes.picker(theme, listOf(it))) }
             "new" -> nav.navigate(Routes.editor(theme, "NEW"))
+            "update" -> vm.checkOnOpen(force = true)        // the banner on Home has the Update button
         }
         consumed()
     }

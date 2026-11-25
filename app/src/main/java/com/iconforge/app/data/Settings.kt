@@ -62,6 +62,10 @@ class Settings(context: Context) {
     var lastUpdateCheck: Long
         get() = prefs.getLong("lastUpdateCheck", 0L)
         set(v) { prefs.edit().putLong("lastUpdateCheck", v).apply() }
+    /** Last app version the background check notified about (one notification per release). */
+    var notifiedUpdate: String
+        get() = prefs.getString("notifiedUpdate", "") ?: ""
+        set(v) { prefs.edit().putString("notifiedUpdate", v).apply() }
     fun setShapeAllIcons(v: Boolean) { _shapeAllIcons.value = v; prefs.edit().putBoolean("shapeAllIcons", v).apply() }
     fun setLiveColours(v: Boolean) { _liveColours.value = v; prefs.edit().putBoolean("liveColours", v).apply() }
     fun setEditorList(v: Boolean) { _editorList.value = v; prefs.edit().putBoolean("editorList", v).apply() }

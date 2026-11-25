@@ -54,7 +54,7 @@ apps" when Android asks). Android 8.0 or newer.
   following your wallpaper in the exported pack, also in a chosen shape (e.g. circle on ColorOS).
 - **Calendar icons** that show today's date, when the source pack has them.
 - **Light / dark icons**: packs with separate dark-mode icons keep both; your launcher switches with the phone's theme.
-- **In-app updates** from GitHub releases (Settings → App updates).
+- **In-app updates** from GitHub releases: a banner on Home and a notification when a new version is out (Settings → App updates).
 - **Themes**: save, rename, duplicate, delete; ZIP backup and import (also imports exported APKs).
 - **New apps**: when you install an app it's themed automatically from your packs if
   possible; otherwise you get a notification to pick an icon. The installed pack then updates

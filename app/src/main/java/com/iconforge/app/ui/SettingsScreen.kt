@@ -123,7 +123,7 @@ fun SettingsScreen(vm: MainViewModel) {
                         else -> vm.checkForUpdate(manual = true)
                     }
                 }
-                toggle(Icons.Outlined.Update, "Check automatically", "Once a day, when you open the app", autoCheck) { s.setAutoUpdateCheck(it) }
+                toggle(Icons.Outlined.Update, "Check automatically", "When you open the app, with a notification for new versions", autoCheck) { s.setAutoUpdateCheck(it) }
             }
             (update as? MainViewModel.Update.Downloading)?.let {
                 LinearProgressIndicator(progress = { it.progress }, modifier = Modifier.fillMaxWidth().padding(top = 8.dp))

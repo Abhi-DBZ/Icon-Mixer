@@ -40,6 +40,7 @@ import androidx.compose.material.icons.outlined.Visibility
 import androidx.compose.material.icons.rounded.Add
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
+import androidx.compose.material.icons.outlined.SystemUpdate
 import androidx.compose.material3.Card
 import androidx.compose.material3.ElevatedCard
 import androidx.compose.material3.CardDefaults
@@ -93,6 +94,7 @@ fun HomeScreen(vm: MainViewModel, nav: NavHostController) {
     val packs by vm.packs.collectAsState()
     val busy by vm.busy.collectAsState()
     val scanned by vm.scanned.collectAsState()
+    val update by vm.update.collectAsState()
     var showNew by remember { mutableStateOf(false) }
     var renaming by remember { mutableStateOf<ThemeEntity?>(null) }
     var deleting by remember { mutableStateOf<ThemeEntity?>(null) }
@@ -127,6 +129,35 @@ fun HomeScreen(vm: MainViewModel, nav: NavHostController) {
         },
     ) { pad ->
         LazyColumn(Modifier.fillMaxSize().padding(pad), contentPadding = PaddingValues(bottom = 96.dp)) {
+            // New app version: stays until it's installed.
+            val upd = update
+            if (upd is MainViewModel.Update.Available || upd is MainViewModel.Update.Downloading) item {
+                androidx.compose.material3.Card(
+                    colors = androidx.compose.material3.CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer),
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp),
+                ) {
+                    Row(Modifier.padding(start = 14.dp, end = 8.dp, top = 8.dp, bottom = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+                        Icon(Icons.Outlined.SystemUpdate, null, tint = MaterialTheme.colorScheme.onPrimaryContainer)
+                        Gap(w = 12.dp)
+                        Column(Modifier.weight(1f)) {
+                            if (upd is MainViewModel.Update.Available) {
+                                Text("Icon Mixer ${upd.release.version} is available", style = MaterialTheme.typography.titleSmall,
+                                    color = MaterialTheme.colorScheme.onPrimaryContainer)
+                                Text("Your themes and packs stay as they are", style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onPrimaryContainer)
+                            } else if (upd is MainViewModel.Update.Downloading) {
+                                Text("Downloading update…", style = MaterialTheme.typography.titleSmall,
+                                    color = MaterialTheme.colorScheme.onPrimaryContainer)
+                                LinearProgressIndicator(progress = { upd.progress }, modifier = Modifier.fillMaxWidth().padding(top = 6.dp))
+                            }
+                        }
+                        if (upd is MainViewModel.Update.Available) {
+                            Gap(w = 8.dp)
+                            Button(onClick = { vm.installUpdate(upd.release) }) { Text("Update") }
+                        }
+                    }
+                }
+            }
             busy?.let { msg ->
                 item {
                     Column(Modifier.padding(horizontal = 16.dp, vertical = 8.dp)) {
