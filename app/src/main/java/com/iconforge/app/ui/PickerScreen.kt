@@ -67,6 +67,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextAlign
@@ -112,6 +113,14 @@ fun PickerScreen(main: MainViewModel, nav: NavHostController, themeId: Long, key
         topBar = {
             TopAppBar(
                 navigationIcon = { IconButton(onClick = done) { Icon(Icons.AutoMirrored.Outlined.ArrowBack, "Back") } },
+                actions = {
+                    if (app != null) Row(Modifier.padding(end = 12.dp), verticalAlignment = Alignment.CenterVertically) {
+                        IconImage(IconSrc.original(app), 32.dp)
+                        Icon(Icons.AutoMirrored.Outlined.ArrowForward, null, Modifier.padding(horizontal = 4.dp).size(16.dp),
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                        if (mapping == null) MissingSlot(32.dp) else IconImage(IconSrc.of(mapping, app), 32.dp)
+                    }
+                },
                 title = {
                     Column {
                         Text("Choose icon")
@@ -134,33 +143,16 @@ fun PickerScreen(main: MainViewModel, nav: NavHostController, themeId: Long, key
         // imePadding: the grid ends at the top of the keyboard instead of running under it.
       CompositionLocalProvider(LocalIconShape provides shape) {
         Column(Modifier.fillMaxSize().padding(pad).imePadding()) {
+            // One row of actions (icon + short label) instead of chips that wrap onto several lines.
             AnimatedVisibility(visible = !searching) {
-                Column(Modifier.padding(horizontal = 12.dp)) {
-                    if (app != null) Row(Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
-                        IconImage(IconSrc.original(app), 48.dp)
-                        Icon(Icons.AutoMirrored.Outlined.ArrowForward, null, Modifier.padding(horizontal = 10.dp))
-                        if (mapping == null) MissingSlot(48.dp) else IconImage(IconSrc.of(mapping, app), 48.dp)
-                        Gap(w = 12.dp)
-                        Text(
-                            if (targets.size > 1) targets.joinToString(", ") { it.label } else app.packageName,
-                            style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            maxLines = 2, overflow = TextOverflow.Ellipsis,
-                        )
+                Row(Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 2.dp), horizontalArrangement = Arrangement.SpaceEvenly) {
+                    PickerAction(Icons.Outlined.AutoFixHigh, "Generate", enabled = packs.isNotEmpty()) { vm.generate(done) }
+                    PickerAction(Icons.Outlined.Tune, "Adjust", enabled = mapping != null) { adjusting = true }
+                    PickerAction(Icons.Outlined.Restore, "Original") { vm.keepOriginal(done) }
+                    PickerAction(Icons.Outlined.Image, "Image") {
+                        imagePicker.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly))
                     }
-                    // Wraps instead of scrolling sideways, so every action stays visible.
-                    androidx.compose.foundation.layout.FlowRow(Modifier.padding(horizontal = 4.dp),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        if (packs.isNotEmpty()) AssistChip(onClick = { vm.generate(done) }, label = { Text("Generate") },
-                            leadingIcon = { Icon(Icons.Outlined.AutoFixHigh, null, Modifier.size(18.dp)) })
-                        if (mapping != null) AssistChip(onClick = { adjusting = true }, label = { Text("Adjust") },
-                            leadingIcon = { Icon(Icons.Outlined.Tune, null, Modifier.size(18.dp)) })
-                        AssistChip(onClick = { vm.keepOriginal(done) }, label = { Text("Keep original") },
-                            leadingIcon = { Icon(Icons.Outlined.Restore, null, Modifier.size(18.dp)) })
-                        AssistChip(onClick = { imagePicker.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)) },
-                            label = { Text("Image") }, leadingIcon = { Icon(Icons.Outlined.Image, null, Modifier.size(18.dp)) })
-                        if (mapping != null) AssistChip(onClick = { vm.clear(done) }, label = { Text("Remove") },
-                            leadingIcon = { Icon(Icons.Outlined.RemoveCircleOutline, null, Modifier.size(18.dp)) })
-                    }
+                    PickerAction(Icons.Outlined.RemoveCircleOutline, "Remove", enabled = mapping != null) { vm.clear(done) }
                 }
             }
 
@@ -429,5 +421,23 @@ private fun LetterRail(
                 color = if (on) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.padding(vertical = 1.dp))
         }
+    }
+}
+
+
+/** Small round action button with its label underneath (Choose icon header). */
+@Composable
+private fun PickerAction(icon: androidx.compose.ui.graphics.vector.ImageVector, label: String, enabled: Boolean = true, onClick: () -> Unit) {
+    val cs = MaterialTheme.colorScheme
+    Column(
+        Modifier.clip(RoundedCornerShape(12.dp)).clickable(enabled = enabled, onClick = onClick).padding(horizontal = 6.dp, vertical = 4.dp)
+            .alpha(if (enabled) 1f else 0.38f),
+        horizontalAlignment = Alignment.CenterHorizontally,
+    ) {
+        Box(Modifier.size(40.dp).clip(androidx.compose.foundation.shape.CircleShape).background(cs.secondaryContainer),
+            contentAlignment = Alignment.Center) {
+            Icon(icon, null, tint = cs.onSecondaryContainer, modifier = Modifier.size(20.dp))
+        }
+        Text(label, style = MaterialTheme.typography.labelSmall, color = cs.onSurfaceVariant, modifier = Modifier.padding(top = 2.dp))
     }
 }
