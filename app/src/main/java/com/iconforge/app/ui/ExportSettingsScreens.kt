@@ -63,6 +63,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
@@ -233,6 +234,17 @@ fun ExportScreen(nav: NavHostController, themeId: Long) {
                         else "Experimental · icons follow your wallpaper colours",
                         live,
                     ) { vm.settings.setLiveColours(it) }
+                    if (live && android.os.Build.VERSION.SDK_INT >= 31) {
+                        OptionLabel("Icon colours \u00b7 Material You icons")
+                        ColourPicker(wallpaper = t.iconColour == null, seed = t.iconColour ?: 0, swatch = 34,
+                            onWallpaper = { vm.setIconColour(null) }, onColour = { vm.setIconColour(it) })
+                        Text(
+                            if (t.iconColour == null) "Icons follow your wallpaper colours"
+                            else "Icons use this colour, whatever your wallpaper. Rebuild the pack after changing.",
+                            style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 6.dp, bottom = 4.dp),
+                        )
+                    }
                     SwitchRow("Include the whole base pack", "Themes apps you install later · bigger file", whole) {
                         vm.settings.setIncludeWholePack(it)
                     }
@@ -374,8 +386,14 @@ internal fun ColourPicker(wallpaper: Boolean, seed: Int, swatch: Int = 48, onWal
         }
         APP_COLOURS.forEach { (name, c) ->
             val on = !wallpaper && seed == c
-            Swatch(selected = on, fill = androidx.compose.ui.graphics.Color(c), label = name, size = swatch, onClick = { onColour(c) }) {
-                if (on) Icon(Icons.Outlined.Check, null, tint = androidx.compose.ui.graphics.Color.White)
+            val mono = c == MONO_SEED
+            Swatch(selected = on, fill = androidx.compose.ui.graphics.Color(c), label = name, size = swatch, onClick = { onColour(c) },
+                brush = if (mono) androidx.compose.ui.graphics.Brush.linearGradient(
+                    0.5f to androidx.compose.ui.graphics.Color.White, 0.5f to androidx.compose.ui.graphics.Color.Black,
+                ) else null) {
+                val light = androidx.compose.ui.graphics.Color(c).luminance() > 0.6f
+                if (on) Icon(Icons.Outlined.Check, null,
+                    tint = if (mono) androidx.compose.ui.graphics.Color.Red else if (light) androidx.compose.ui.graphics.Color.Black else androidx.compose.ui.graphics.Color.White)
             }
         }
     }
@@ -384,14 +402,16 @@ internal fun ColourPicker(wallpaper: Boolean, seed: Int, swatch: Int = 48, onWal
 @Composable
 private fun Swatch(
     selected: Boolean, fill: androidx.compose.ui.graphics.Color, label: String, size: Int = 48, onClick: () -> Unit,
+    brush: androidx.compose.ui.graphics.Brush? = null,
     content: @Composable () -> Unit,
 ) {
     val cs = MaterialTheme.colorScheme
     androidx.compose.foundation.layout.Box(
         Modifier.size(size.dp)
             .clip(androidx.compose.foundation.shape.CircleShape)
-            .background(if (selected && fill == cs.surfaceContainerHighest) cs.primary else fill)
-            .then(if (selected) Modifier.border(3.dp, cs.outline, androidx.compose.foundation.shape.CircleShape) else Modifier)
+            .then(if (brush != null) Modifier.background(brush) else Modifier.background(if (selected && fill == cs.surfaceContainerHighest) cs.primary else fill))
+            .then(if (selected) Modifier.border(3.dp, cs.outline, androidx.compose.foundation.shape.CircleShape)
+                  else Modifier.border(1.dp, cs.outlineVariant, androidx.compose.foundation.shape.CircleShape))
             .clickable(onClickLabel = label, onClick = onClick)
             .semantics { contentDescription = label },
         contentAlignment = Alignment.Center,

@@ -406,7 +406,7 @@ class LiveBundle {
  * Copies drawables of one installed pack. Only worth it for XML icons (vectors /
  * adaptive icons that reference colours); bitmap icons stay rasterised.
  */
-class LiveCopier(private val src: SourceRes, packageName: String) {
+class LiveCopier(private val src: SourceRes, packageName: String, private val palette: Map<Int, Int>? = null) {
     private class Unsupported(msg: String) : Exception(msg)
 
     private val prefix = "lv" + Integer.toHexString(packageName.hashCode() and 0xFFFFFF) + "_"
@@ -526,7 +526,8 @@ class LiveCopier(private val src: SourceRes, packageName: String) {
         val (type, _) = src.names[id] ?: throw Unsupported("unknown id ${Integer.toHexString(id)}")
         // Shaped copies get their own names, so a shaped and a plain copy can't be mixed up.
         val shapeTag = reshape?.let { "s" + Integer.toHexString((it + reshapeScale).hashCode() and 0xFFFF) + "_" } ?: ""
-        return LiveKey(type, prefix + shapeTag + Integer.toHexString(id))
+        val colourTag = palette?.let { "c" + Integer.toHexString(it.hashCode() and 0xFFFF) + "_" } ?: ""
+        return LiveKey(type, prefix + shapeTag + colourTag + Integer.toHexString(id))
     }
 
     private fun copy(id: Int, b: LiveBundle, done: LiveBundle): LiveKey {
@@ -538,7 +539,7 @@ class LiveCopier(private val src: SourceRes, packageName: String) {
             if (v.complex) throw Unsupported("bag resource")
             v.config to when (v.type) {
                 0x01, 0x07 -> if (v.data ushr 24 == 0x7f) LiveVal.Ref(copy(v.data, b, done))
-                              else if (v.data ushr 24 == 0x01) LiveVal.Fixed(0x01, v.data)
+                              else if (v.data ushr 24 == 0x01) palette?.get(v.data)?.let { LiveVal.Fixed(0x1c, it) } ?: LiveVal.Fixed(0x01, v.data)
                               else throw Unsupported("foreign reference")
                 0x02, 0x08 -> if (v.data ushr 24 == 0x01) LiveVal.Fixed(0x02, v.data) else throw Unsupported("app theme attribute")
                 0x03 -> {
@@ -563,7 +564,8 @@ class LiveCopier(private val src: SourceRes, packageName: String) {
     }
 
     /** Points the compiled XML's references at the copied resources. */
-    private fun rewriteXml(bytes: ByteArray, b: LiveBundle, done: LiveBundle): XmlTemplate {
+    private fun rewriteXml(original: ByteArray, b: LiveBundle, done: LiveBundle): XmlTemplate {
+        val bytes = if (palette != null) original.copyOf() else original
         val le = Le(bytes)
         if (le.u16(0) != 0x0003) throw Unsupported("not compiled xml")
         val patches = ArrayList<Pair<Int, LiveKey>>()
@@ -580,6 +582,13 @@ class LiveCopier(private val src: SourceRes, packageName: String) {
                     for (i in 0 until count) {
                         val a = c + 16 + attrStart + i * attrSize
                         val dt = le.u8(a + 15); val data = le.u32(a + 16)
+                        val fixed = if (dt == 0x01 || dt == 0x07) palette?.get(data) else null
+                        if (fixed != null) {
+                            // @android:color/system_… → the chosen palette's colour (type ARGB8).
+                            bytes[a + 15] = 0x1c
+                            for (k in 0..3) bytes[a + 16 + k] = (fixed ushr (8 * k)).toByte()
+                            continue
+                        }
                         when (dt) {
                             0x01, 0x07 -> if (data ushr 24 == 0x7f) patches += (a + 16) to copy(data, b, done)
                             0x02, 0x08 -> if (data ushr 24 != 0x01) throw Unsupported("app theme attribute in xml")

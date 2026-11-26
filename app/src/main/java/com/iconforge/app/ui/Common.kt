@@ -56,10 +56,17 @@ import com.iconforge.app.data.Settings
 
 /** App colours offered in Settings (wallpaper colours come first, on Android 12+). */
 val APP_COLOURS = listOf(
-    "Indigo" to 0xFF3D4FC4, "Blue" to 0xFF1E88E5, "Teal" to 0xFF00897B, "Green" to 0xFF43A047,
-    "Lime" to 0xFF7CB342, "Amber" to 0xFFFFB300, "Orange" to 0xFFF4511E, "Red" to 0xFFE53935,
-    "Pink" to 0xFFD81B60, "Purple" to 0xFF8E24AA, "Brown" to 0xFF6D4C41, "Slate" to 0xFF546E7A,
+    "Black & white" to MONO_SEED.toLong(),
+    "Indigo" to 0xFF3D4FC4, "Blue" to 0xFF1E88E5, "Sky" to 0xFF039BE5, "Cyan" to 0xFF00ACC1,
+    "Teal" to 0xFF00897B, "Mint" to 0xFF26A69A, "Green" to 0xFF43A047, "Lime" to 0xFF7CB342,
+    "Olive" to 0xFF827717, "Yellow" to 0xFFFDD835, "Amber" to 0xFFFFB300, "Orange" to 0xFFF4511E,
+    "Coral" to 0xFFFF7043, "Red" to 0xFFE53935, "Rose" to 0xFFEC407A, "Pink" to 0xFFD81B60,
+    "Magenta" to 0xFFC2185B, "Purple" to 0xFF8E24AA, "Violet" to 0xFF7E57C2, "Lavender" to 0xFF9575CD,
+    "Brown" to 0xFF6D4C41, "Sand" to 0xFFA1887F, "Slate" to 0xFF546E7A, "Graphite" to 0xFF455A64,
 ).map { (n, c) -> n to c.toInt() }
+
+/** "Black & white": white accents in dark mode, black in light mode (no hue). */
+const val MONO_SEED = 0xFF808080.toInt()
 
 private fun ColorScheme.pureBlack() = copy(
     background = Color.Black, surface = Color.Black, surfaceContainerLowest = Color.Black,
@@ -81,7 +88,8 @@ fun IconForgeTheme(settings: Settings, content: @Composable () -> Unit) {
     }
     var scheme = when {
         dynamic && Build.VERSION.SDK_INT >= 31 -> if (dark) dynamicDarkColorScheme(ctx) else dynamicLightColorScheme(ctx)
-        else -> com.materialkolor.dynamicColorScheme(seedColor = Color(seed), isDark = dark, isAmoled = false)
+        else -> com.materialkolor.dynamicColorScheme(seedColor = Color(seed), isDark = dark, isAmoled = false,
+            style = if (seed == MONO_SEED) com.materialkolor.PaletteStyle.Monochrome else com.materialkolor.PaletteStyle.TonalSpot)
     }
     if (dark && black) scheme = scheme.pureBlack()
     MaterialTheme(colorScheme = scheme, content = content)

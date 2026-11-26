@@ -444,6 +444,7 @@ class ExportViewModel(application: Application, val themeId: Long) : AndroidView
 
     fun setIconShape(shape: String) = viewModelScope.launch { a.repo.setIconShape(themeId, shape) }
     fun setIconScale(scale: Float) = viewModelScope.launch { a.repo.setIconScale(themeId, scale) }
+    fun setIconColour(c: Int?) = viewModelScope.launch { a.repo.setIconColour(themeId, c) }
     fun isInstalled(t: ThemeEntity) = a.exporter.isInstalled(t)
 
     /** Icon Mixer packs installed on the phone (refreshed when the screen resumes). */

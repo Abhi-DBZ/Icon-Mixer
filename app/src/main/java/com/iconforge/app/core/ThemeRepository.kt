@@ -84,6 +84,11 @@ class ThemeRepository(
         if (t.iconShape != shape) db.themes().update(t.copy(iconShape = shape, updatedAt = System.currentTimeMillis()))
     }
 
+    suspend fun setIconColour(id: Long, colour: Int?) {
+        val t = db.themes().get(id) ?: return
+        if (t.iconColour != colour) db.themes().update(t.copy(iconColour = colour, updatedAt = System.currentTimeMillis()))
+    }
+
     suspend fun setIconScale(id: Long, scale: Float) {
         val t = db.themes().get(id) ?: return
         if (t.iconScale != scale) db.themes().update(t.copy(iconScale = scale, updatedAt = System.currentTimeMillis()))

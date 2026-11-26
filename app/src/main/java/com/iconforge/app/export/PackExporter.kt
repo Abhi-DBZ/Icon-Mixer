@@ -131,6 +131,8 @@ class PackExporter(
         val size = settings.exportSize.value
         val shape = com.iconforge.app.core.IconShape.of(theme.iconShape)
         val fg = theme.iconScale
+        // Own colour for live Material You icons: wallpaper colour references become fixed colours.
+        val iconPalette = theme.iconColour?.let { IconPalette.forSeed(it) }
         val apps = db.apps().all().associateBy { it.componentKey }
         val maps = db.mappings().forTheme(themeId).sortedBy { apps[it.componentKey]?.label?.lowercase() ?: "~" + it.componentKey }
 
@@ -150,7 +152,7 @@ class PackExporter(
             runCatching {
                 val ai = context.packageManager.getApplicationInfo(pack, 0)
                 val apks = listOfNotNull(ai.sourceDir) + (ai.splitSourceDirs?.toList() ?: emptyList())
-                SourceRes(apks.map { File(it) }).also { sources += it }.let { LiveCopier(it, pack) }
+                SourceRes(apks.map { File(it) }).also { sources += it }.let { LiveCopier(it, pack, iconPalette) }
             }.getOrNull()
         }
 
@@ -266,6 +268,7 @@ class PackExporter(
             put("format", "iconforge-theme"); put("version", 1)
             put("name", theme.name); put("createdAt", theme.createdAt); put("exportedAt", System.currentTimeMillis())
             put("basePack", theme.basePack ?: JSONObject.NULL); put("iconSize", size); put("iconShape", theme.iconShape); put("iconScale", theme.iconScale.toDouble())
+            theme.iconColour?.let { put("iconColour", it) }
             put("packageName", packageNameFor(theme)); put("mappings", jsonMaps)
         }
         RenderedTheme(theme, packageNameFor(theme), icons, outMaps, json, collage, calendars, bundle.takeIf { !it.isEmpty })
@@ -418,6 +421,7 @@ class PackExporter(
         json.optString("packageName").takeIf { it.startsWith(PACK_PREFIX) }?.let { repo.setPackSuffix(id, it.removePrefix(PACK_PREFIX)) }
         if (base != null) repo.setBasePack(id, base)
         json.optString("iconShape").takeIf { it.isNotEmpty() }?.let { repo.setIconShape(id, it) }
+        if (json.has("iconColour")) repo.setIconColour(id, json.optInt("iconColour"))
         json.optDouble("iconScale", 1.0).toFloat().takeIf { it in 0.5f..1.5f && it != 1f }?.let { repo.setIconScale(id, it) }
         val dir = File(repo.customDir, "t$id").apply { mkdirs() }
         val arr = json.optJSONArray("mappings") ?: JSONArray()

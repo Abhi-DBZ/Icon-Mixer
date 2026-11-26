@@ -54,6 +54,7 @@ apps" when Android asks). Android 8.0 or newer.
 - **Home-screen preview** on your wallpaper colours (or a photo), with missing icons highlighted.
 - **Live Material You colours (experimental)**: icons from packs like Pix Material You keep
   following your wallpaper in the exported pack, also in a chosen shape (e.g. circle on ColorOS).
+  Or give them a colour of your own (any of the app colours, or black & white) instead of the wallpaper's.
 - **Calendar icons** that show today's date, when the source pack has them.
 - **Light / dark icons**: packs with separate dark-mode icons keep both; your launcher switches with the phone's theme.
 - **In-app updates** from GitHub releases: a banner on Home and a notification when a new version is out (Settings → App updates).

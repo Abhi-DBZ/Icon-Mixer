@@ -61,6 +61,8 @@ data class ThemeEntity(
     val iconShape: String = "DEFAULT",
     /** Size of the icon inside [iconShape] (1 = as designed); ignored for the launcher default. */
     val iconScale: Float = 1f,
+    /** Seed colour for live Material You icons (ARGB); null = follow the wallpaper. */
+    val iconColour: Int? = null,
 )
 
 object Source {
@@ -172,7 +174,7 @@ interface MappingDao {
 
 @Database(
     entities = [InstalledApp::class, IconPackEntity::class, ThemeEntity::class, MappingEntity::class],
-    version = 4,
+    version = 5,
     exportSchema = false,
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -184,8 +186,14 @@ abstract class AppDatabase : RoomDatabase() {
     companion object {
         fun create(context: Context): AppDatabase =
             Room.databaseBuilder(context, AppDatabase::class.java, "iconforge.db")
-                .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4)
+                .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5)
                 .build()
+
+        private val MIGRATION_4_5 = object : Migration(4, 5) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE themes ADD COLUMN iconColour INTEGER")
+            }
+        }
 
         private val MIGRATION_3_4 = object : Migration(3, 4) {
             override fun migrate(db: SupportSQLiteDatabase) {

@@ -8,6 +8,7 @@ import com.iconforge.app.export.PackMapping
 import com.iconforge.app.export.PackSpec
 import com.iconforge.app.export.PackCalendar
 import com.iconforge.app.export.ShapePaths
+import com.iconforge.app.export.IconPalette
 import com.iconforge.app.export.SourceRes
 import java.io.File
 import java.util.Properties
@@ -212,6 +213,29 @@ class LiveCopyTest {
             assertTrue(appfilter, appfilter.contains("calendar") && appfilter.contains("cal_x_"))
             assertEquals(true, out.length() > 0)
             if (i == 0) File(work, "dump.txt").writeText(dump)
+
+            // Own icon colour: wallpaper references become fixed colours from the chosen palette.
+            val palette = IconPalette.forSeed(0xFFE53935.toInt())
+            assertTrue("palette covers the system tones: ${palette.size}", palette.size >= 65)
+            val red = LiveBundle()
+            SourceRes(listOf(srcApk)).use { src ->
+                assertTrue(LiveCopier(src, "com.example.mypack", palette).collect("camera", "camera_red", red,
+                    shape = ShapePaths.svg("CIRCLE")))
+            }
+            val redOut = File(work, "red$i.apk")
+            ApkBuilder.buildUnsigned(PackSpec(
+                packageName = "com.iconforge.pack.redtest", label = "Red test", versionCode = 1, versionName = "1",
+                icons = listOf(PackIcon("static_icon", png)),
+                mappings = listOf(PackMapping("com.android.camera", "com.android.camera.Camera", "camera_red")),
+                appIconRes = "static_icon", live = red,
+            ), redOut)
+            val redDump = run(aapt2, "dump", "resources", redOut.path)
+            assertFalse("no wallpaper colours left\n$redDump", redDump.contains("@0x0106"))
+            assertTrue("fixed colours in day and night\n$redDump", Regex("""#ff[0-9a-f]{6}""").findAll(redDump).count() >= 4)
+            Regex("""(res/lv/\S+\.xml)""").findAll(redDump).map { it.value }.distinct().forEach { path ->
+                val tree = run(aapt2, "dump", "xmltree", "--file", path, redOut.path)
+                assertFalse("xml colours replaced too\n$tree", tree.contains("@0x0106"))
+            }
         }
     }
 }
