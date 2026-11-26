@@ -49,9 +49,6 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
-import androidx.compose.material3.SegmentedButton
-import androidx.compose.material3.SegmentedButtonDefaults
-import androidx.compose.material3.SingleChoiceSegmentedButtonRow
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -118,7 +115,7 @@ fun ExportScreen(nav: NavHostController, themeId: Long) {
             )
 
             // ---- APK
-            ElevatedCard(Modifier.fillMaxWidth()) {
+            ElevatedCard(Modifier.fillMaxWidth(), colors = CardDefaults.elevatedCardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerHigh)) {
                 Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Icon(Icons.Outlined.Android, null); Gap(w = 8.dp)
@@ -173,7 +170,7 @@ fun ExportScreen(nav: NavHostController, themeId: Long) {
             if (installed.isNotEmpty()) {
                 val problems = installed.count { it.themeId != t.id && it.label == t.name }
                 var open by remember(problems) { mutableStateOf(problems > 0) }
-                ElevatedCard(Modifier.fillMaxWidth()) {
+                ElevatedCard(Modifier.fillMaxWidth(), colors = CardDefaults.elevatedCardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerHigh)) {
                     Row(
                         Modifier.fillMaxWidth().clickable { open = !open }.padding(horizontal = 16.dp, vertical = 12.dp),
                         verticalAlignment = Alignment.CenterVertically,
@@ -213,7 +210,7 @@ fun ExportScreen(nav: NavHostController, themeId: Long) {
             }
 
             // ---- options
-            ElevatedCard(Modifier.fillMaxWidth()) {
+            ElevatedCard(Modifier.fillMaxWidth(), colors = CardDefaults.elevatedCardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerHigh)) {
                 Column(Modifier.padding(vertical = 12.dp)) {
                     Text("Options", style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.primary,
                         modifier = Modifier.padding(horizontal = 16.dp))
@@ -240,7 +237,7 @@ fun ExportScreen(nav: NavHostController, themeId: Long) {
             }
 
             // ---- ZIP
-            ElevatedCard(Modifier.fillMaxWidth()) {
+            ElevatedCard(Modifier.fillMaxWidth(), colors = CardDefaults.elevatedCardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerHigh)) {
                 Row(Modifier.padding(start = 16.dp, end = 8.dp, top = 10.dp, bottom = 10.dp), verticalAlignment = Alignment.CenterVertically) {
                     Icon(Icons.Outlined.FolderZip, null); Gap(w = 12.dp)
                     Column(Modifier.weight(1f)) {
@@ -295,21 +292,31 @@ private fun SizePicker(themeId: Long, shape: IconShape, selected: Int, onPick: (
             }
         }
     }
-    SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth().padding(horizontal = 16.dp)) {
+    val cs = MaterialTheme.colorScheme
+    Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
         sizes.forEachIndexed { i, (px, letter) ->
-            SegmentedButton(
-                selected = selected == px, onClick = { onPick(px) },
-                shape = SegmentedButtonDefaults.itemShape(i, sizes.size),
+            val on = selected == px
+            val tile = androidx.compose.foundation.shape.RoundedCornerShape(16.dp)
+            Column(
+                Modifier.weight(1f).clip(tile)
+                    .background(if (on) cs.primaryContainer else cs.surfaceContainerHighest)
+                    .border(if (on) 2.dp else 1.dp, if (on) cs.primary else cs.outlineVariant, tile)
+                    .clickable { onPick(px) }
+                    .padding(vertical = 12.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
             ) {
-                Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    Text("$letter · $px", maxLines = 1, softWrap = false)
-                    Text(bytes?.getOrNull(i)?.let { "≈ ${((it + 512) / 1024).coerceAtLeast(1)} KB each" } ?: "…",
-                        style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        maxLines = 1, softWrap = false)
-                }
+                val fg = if (on) cs.onPrimaryContainer else cs.onSurface
+                Text(letter, style = MaterialTheme.typography.titleLarge, color = fg,
+                    fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold)
+                Text("$px px", style = MaterialTheme.typography.labelMedium, color = fg)
+                Text(bytes?.getOrNull(i)?.let { "≈ ${((it + 512) / 1024).coerceAtLeast(1)} KB" } ?: "…",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = if (on) cs.onPrimaryContainer.copy(alpha = 0.8f) else cs.onSurfaceVariant)
             }
         }
     }
+    Text("Size of each icon in the pack", style = MaterialTheme.typography.bodySmall, color = cs.onSurfaceVariant,
+        modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 6.dp))
 }
 
 @Composable

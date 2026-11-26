@@ -3,6 +3,8 @@ package com.iconforge.app.ui
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.border
+import androidx.compose.ui.draw.clip
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -184,8 +186,9 @@ fun HomeScreen(vm: MainViewModel, nav: NavHostController) {
                 item { ActiveThemeCard(t, coverage, packs, reviewCount, nav, vm) { autoFillFor = t.id } }
                 if (newApps.isNotEmpty()) item {
                     // One quiet row: new apps' icons, Review, and a clear close button.
-                    ElevatedCard(
+                    Card(
                         onClick = { nav.navigate(Routes.editor(t.id, "NEW")) },
+                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerHigh),
                         modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp),
                     ) {
                         Row(Modifier.padding(start = 14.dp, end = 4.dp, top = 6.dp, bottom = 6.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -256,8 +259,13 @@ private fun ActiveThemeCard(
 ) {
     val base = packs.firstOrNull { it.packageName == t.basePack }
     // Raised card on a light surface: tinted buttons stay visible in light mode too.
-    ElevatedCard(onClick = { nav.navigate(Routes.editor(t.id)) }, modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp)) {
-        Column(Modifier.padding(horizontal = 16.dp, vertical = 14.dp)) {
+    Card(
+        onClick = { nav.navigate(Routes.editor(t.id)) },
+        shape = androidx.compose.foundation.shape.RoundedCornerShape(24.dp),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerHigh),
+        modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
+    ) {
+        Column(Modifier.padding(horizontal = 18.dp, vertical = 16.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Column(Modifier.weight(1f)) {
                     Text(t.name, style = MaterialTheme.typography.titleLarge, maxLines = 1, overflow = TextOverflow.Ellipsis)
@@ -323,9 +331,13 @@ private fun ThemeRow(
 ) {
     var menu by remember { mutableStateOf(false) }
     val date = remember(theme.updatedAt) { DateFormat.getDateInstance(DateFormat.MEDIUM).format(Date(theme.updatedAt)) }
+    val cs = MaterialTheme.colorScheme
+    val rowShape = androidx.compose.foundation.shape.RoundedCornerShape(18.dp)
     ListItem(
-        modifier = Modifier.clickable(onClick = onClick),
-        colors = ListItemDefaults.colors(containerColor = if (active) MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.5f) else MaterialTheme.colorScheme.surface),
+        modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp)
+            .then(if (active) Modifier.border(1.5.dp, cs.primary, rowShape) else Modifier)
+            .clip(rowShape).clickable(onClick = onClick),
+        colors = ListItemDefaults.colors(containerColor = if (active) cs.secondaryContainer else cs.surfaceContainer),
         leadingContent = { RadioButton(selected = active, onClick = onClick) },
         headlineContent = { Text(theme.name, fontWeight = if (active) FontWeight.SemiBold else null) },
         supportingContent = {

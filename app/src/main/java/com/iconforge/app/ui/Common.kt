@@ -63,7 +63,7 @@ val APP_COLOURS = listOf(
 private fun ColorScheme.pureBlack() = copy(
     background = Color.Black, surface = Color.Black, surfaceContainerLowest = Color.Black,
     surfaceContainerLow = Color(0xFF0B0B0D), surfaceContainer = Color(0xFF111114),
-    surfaceContainerHigh = Color(0xFF18181C), surfaceContainerHighest = Color(0xFF202025),
+    surfaceContainerHigh = Color(0xFF1C1C21), surfaceContainerHighest = Color(0xFF26262C),
 )
 
 @Composable
