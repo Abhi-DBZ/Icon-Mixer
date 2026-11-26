@@ -63,6 +63,8 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
+import androidx.compose.foundation.layout.width
+import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
@@ -244,6 +246,7 @@ fun ExportScreen(nav: NavHostController, themeId: Long) {
                             style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
                             modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 6.dp, bottom = 4.dp),
                         )
+                        IconColourPreview(t.id, IconShape.of(t.iconShape), t.iconScale, t.iconColour)
                     }
                     SwitchRow("Include the whole base pack", "Themes apps you install later · bigger file", whole) {
                         vm.settings.setIncludeWholePack(it)
@@ -326,6 +329,53 @@ private fun SizePicker(themeId: Long, shape: IconShape, selected: Int, onPick: (
                 Text(bytes?.getOrNull(i)?.let { "≈ ${((it + 512) / 1024).coerceAtLeast(1)} KB" } ?: "…",
                     style = MaterialTheme.typography.labelSmall, maxLines = 1,
                     color = if (on) cs.onPrimaryContainer.copy(alpha = 0.8f) else cs.onSurfaceVariant)
+            }
+        }
+    }
+}
+
+/** A few of the theme's pack icons in light and dark mode, in the chosen icon colour. */
+@Composable
+private fun IconColourPreview(themeId: Long, shape: IconShape, fgScale: Float, colour: Int?) {
+    val a = LocalContext.current.app
+    val px = with(androidx.compose.ui.platform.LocalDensity.current) { 40.dp.roundToPx() }
+    val rows by androidx.compose.runtime.produceState<List<List<androidx.compose.ui.graphics.ImageBitmap>>?>(null, themeId, shape, fgScale, colour) {
+        value = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Default) {
+            val apps = a.db.apps().all().associateBy { it.componentKey }
+            val srcs = a.db.mappings().forTheme(themeId)
+                .filter { it.source == com.iconforge.app.data.Source.PACK && it.scale == 1f && it.bgColor == null }
+                .sortedBy { apps[it.componentKey]?.label?.lowercase() ?: "~" }
+                .mapNotNull { com.iconforge.app.core.IconSrc.of(it, apps[it.componentKey]) }
+                .distinctBy { it.key }.take(6)
+            val from = com.iconforge.app.export.IconPalette.current(a)
+            val to = colour?.let { com.iconforge.app.export.IconPalette.forSeed(it) }
+            listOf(false, true).map { night ->
+                srcs.mapNotNull { s ->
+                    a.icons.renderForExport(s, px, shape, night = night, fgScale = fgScale)
+                        ?.let { b -> if (to != null) com.iconforge.app.export.IconPalette.recolour(b, from, to) else b }
+                        ?.asImageBitmap()
+                }
+            }
+        }
+    }
+    val r = rows ?: return
+    if (r.all { it.isEmpty() }) return
+    val labels = listOf("Light", "Dark")
+    Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 6.dp)) {
+        r.forEachIndexed { i, icons ->
+            val dark = i == 1
+            Row(
+                Modifier.fillMaxWidth().padding(vertical = 3.dp)
+                    .clip(androidx.compose.foundation.shape.RoundedCornerShape(14.dp))
+                    .background(if (dark) androidx.compose.ui.graphics.Color(0xFF1B1B1F) else androidx.compose.ui.graphics.Color(0xFFF4F3F8))
+                    .padding(horizontal = 12.dp, vertical = 8.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                Text(labels[i], style = MaterialTheme.typography.labelSmall,
+                    color = if (dark) androidx.compose.ui.graphics.Color(0xFFC8C6D0) else androidx.compose.ui.graphics.Color(0xFF47464F),
+                    modifier = Modifier.width(34.dp))
+                icons.forEach { androidx.compose.foundation.Image(it, null, Modifier.size(34.dp)) }
             }
         }
     }
