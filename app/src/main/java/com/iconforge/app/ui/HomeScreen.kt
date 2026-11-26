@@ -4,6 +4,7 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.border
+import androidx.compose.foundation.background
 import androidx.compose.ui.draw.clip
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -189,6 +190,7 @@ fun HomeScreen(vm: MainViewModel, nav: NavHostController) {
                     Card(
                         onClick = { nav.navigate(Routes.editor(t.id, "NEW")) },
                         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerHigh),
+                        border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
                         modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp),
                     ) {
                         Row(Modifier.padding(start = 14.dp, end = 4.dp, top = 6.dp, bottom = 6.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -263,6 +265,7 @@ private fun ActiveThemeCard(
         onClick = { nav.navigate(Routes.editor(t.id)) },
         shape = androidx.compose.foundation.shape.RoundedCornerShape(24.dp),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerHigh),
+        border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
         modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
     ) {
         Column(Modifier.padding(horizontal = 18.dp, vertical = 16.dp)) {
@@ -330,35 +333,51 @@ private fun ThemeRow(
     onDuplicate: () -> Unit, onExport: () -> Unit, onDelete: () -> Unit, onPreview: () -> Unit, onShare: () -> Unit,
 ) {
     var menu by remember { mutableStateOf(false) }
-    val date = remember(theme.updatedAt) { DateFormat.getDateInstance(DateFormat.MEDIUM).format(Date(theme.updatedAt)) }
+    // Short date ("26 Nov"); the year only when it isn't this year.
+    val date = remember(theme.updatedAt) {
+        val now = java.util.Calendar.getInstance().get(java.util.Calendar.YEAR)
+        val then = java.util.Calendar.getInstance().apply { timeInMillis = theme.updatedAt }.get(java.util.Calendar.YEAR)
+        java.text.SimpleDateFormat(if (now == then) "d MMM" else "d MMM yyyy", java.util.Locale.getDefault()).format(Date(theme.updatedAt))
+    }
     val cs = MaterialTheme.colorScheme
-    val rowShape = androidx.compose.foundation.shape.RoundedCornerShape(18.dp)
-    ListItem(
-        modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp)
-            .then(if (active) Modifier.border(1.5.dp, cs.primary, rowShape) else Modifier)
-            .clip(rowShape).clickable(onClick = onClick),
-        colors = ListItemDefaults.colors(containerColor = if (active) cs.secondaryContainer else cs.surfaceContainer),
-        leadingContent = { RadioButton(selected = active, onClick = onClick) },
-        headlineContent = { Text(theme.name, fontWeight = if (active) FontWeight.SemiBold else null) },
-        supportingContent = {
-            Text("${(theme.coverage * 100).toInt()}% · ${theme.themedApps}/${theme.totalApps} apps · edited $date" +
-                if (theme.exportCount > 0) " · exported" else "")
-        },
-        trailingContent = {
-            Box {
-                IconButton(onClick = { menu = true }) { Icon(Icons.Outlined.MoreVert, "Theme options") }
-                DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
-                    DropdownMenuItem(text = { Text("Edit icons") }, leadingIcon = { Icon(Icons.Outlined.Edit, null) }, onClick = { menu = false; onEdit() })
-                    DropdownMenuItem(text = { Text("Rename") }, leadingIcon = { Icon(Icons.Outlined.Edit, null) }, onClick = { menu = false; onRename() })
-                    DropdownMenuItem(text = { Text("Duplicate") }, leadingIcon = { Icon(Icons.Outlined.ContentCopy, null) }, onClick = { menu = false; onDuplicate() })
-                    DropdownMenuItem(text = { Text("Preview") }, leadingIcon = { Icon(Icons.Outlined.Visibility, null) }, onClick = { menu = false; onPreview() })
-                    DropdownMenuItem(text = { Text("Export") }, leadingIcon = { Icon(Icons.Outlined.FileDownload, null) }, onClick = { menu = false; onExport() })
-                    DropdownMenuItem(text = { Text("Share") }, leadingIcon = { Icon(Icons.Outlined.Share, null) }, onClick = { menu = false; onShare() })
-                    DropdownMenuItem(text = { Text("Delete") }, leadingIcon = { Icon(Icons.Outlined.Delete, null) }, onClick = { menu = false; onDelete() })
+    val rowShape = androidx.compose.foundation.shape.RoundedCornerShape(16.dp)
+    Row(
+        Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 3.dp)
+            .clip(rowShape)
+            .background(if (active) cs.secondaryContainer else cs.surfaceContainerLow)
+            .border(if (active) 1.5.dp else 1.dp, if (active) cs.primary else cs.outlineVariant, rowShape)
+            .clickable(onClick = onClick)
+            .padding(start = 4.dp, end = 0.dp, top = 2.dp, bottom = 2.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        RadioButton(selected = active, onClick = onClick)
+        Column(Modifier.weight(1f)) {
+            Text(theme.name, style = MaterialTheme.typography.titleSmall,
+                fontWeight = if (active) FontWeight.SemiBold else FontWeight.Medium,
+                maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text("${(theme.coverage * 100).toInt()}% · ${theme.themedApps}/${theme.totalApps} apps · $date",
+                    style = MaterialTheme.typography.bodySmall, color = cs.onSurfaceVariant,
+                    maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f, fill = false))
+                if (theme.exportCount > 0) {
+                    Gap(w = 6.dp)
+                    Icon(Icons.Outlined.CheckCircle, "Exported", tint = cs.primary, modifier = Modifier.size(14.dp))
                 }
             }
-        },
-    )
+        }
+        Box {
+            IconButton(onClick = { menu = true }) { Icon(Icons.Outlined.MoreVert, "Theme options") }
+            DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
+                DropdownMenuItem(text = { Text("Edit icons") }, leadingIcon = { Icon(Icons.Outlined.Edit, null) }, onClick = { menu = false; onEdit() })
+                DropdownMenuItem(text = { Text("Rename") }, leadingIcon = { Icon(Icons.Outlined.Edit, null) }, onClick = { menu = false; onRename() })
+                DropdownMenuItem(text = { Text("Duplicate") }, leadingIcon = { Icon(Icons.Outlined.ContentCopy, null) }, onClick = { menu = false; onDuplicate() })
+                DropdownMenuItem(text = { Text("Preview") }, leadingIcon = { Icon(Icons.Outlined.Visibility, null) }, onClick = { menu = false; onPreview() })
+                DropdownMenuItem(text = { Text("Export") }, leadingIcon = { Icon(Icons.Outlined.FileDownload, null) }, onClick = { menu = false; onExport() })
+                DropdownMenuItem(text = { Text("Share") }, leadingIcon = { Icon(Icons.Outlined.Share, null) }, onClick = { menu = false; onShare() })
+                DropdownMenuItem(text = { Text("Delete") }, leadingIcon = { Icon(Icons.Outlined.Delete, null) }, onClick = { menu = false; onDelete() })
+            }
+        }
+    }
 }
 
 @Composable
