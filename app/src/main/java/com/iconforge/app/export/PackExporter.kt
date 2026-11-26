@@ -214,7 +214,9 @@ class PackExporter(
             // Dynamic calendar icon (date on the icon), when the source pack has one for this app.
             if (forApk && m.source == Source.PACK && m.iconPack != null) {
                 val pack = packs.load(m.iconPack)
-                val prefix = pack?.calendars?.get(m.componentKey)
+                // The pack's calendar for this app, else any dated set the chosen icon belongs to
+                // (so a calendar icon picked for another calendar app shows today's date too).
+                val prefix = pack?.calendars?.get(m.componentKey) ?: pack?.dateSetOf(m.iconResource)
                 if (prefix != null) {
                     val newPrefix = "cal_" + ApkBuilder.resName(m.packageName) + "_"
                     val ok = (1..31).all { d ->

@@ -72,6 +72,23 @@ class LoadedPack(
     /** Any drawable name → the one name kept for its picture (packs list one picture under several names). */
     private val sameAs: Map<String, String> = emptyMap(),
 ) {
+    /**
+     * Prefix of a dated set (<prefix>1 … <prefix>31) that [name] belongs to, e.g.
+     * "google_calendar_31" → "google_calendar_"; null when the pack has no full set for it.
+     * Lets any app use a pack's calendar icons, not only the app the pack made them for.
+     */
+    fun dateSetOf(name: String?): String? {
+        if (name == null) return null
+        val names = listOf(name) + sameAs.filterValues { it == name }.keys      // any alias may carry the number
+        for (n in names) {
+            val m = Regex("""^(.*?\D)(\d{1,2})$""").find(n) ?: continue
+            val prefix = m.groupValues[1]
+            if ((1..31).all { drawableId(prefix + it) != 0 }) return prefix
+        }
+        // The pack's own calendar declaration whose set contains this icon.
+        return calendars.values.firstOrNull { p -> (1..31).any { canonical(p + it) == canonical(name) } }
+    }
+
     /** The name [icons] uses for this drawable's picture, so one picture is copied once. */
     fun canonical(name: String): String = sameAs[name] ?: name
 

@@ -172,7 +172,9 @@ class ThemeRepository(
     suspend fun assign(themeId: Long, apps: List<InstalledApp>, source: String, pack: String? = null,
                        drawable: String? = null, customPath: String? = null) {
         val label = if (apps.size == 1) "Icon for ${apps[0].label}" else "Icon for ${apps.size} apps"
-        val said = if (apps.size == 1) "Icon changed for ${apps[0].label}" else "Icon changed for ${apps.size} apps"
+        val dated = source == Source.PACK && pack != null && packs.load(pack)?.dateSetOf(drawable) != null
+        val said = (if (apps.size == 1) "Icon changed for ${apps[0].label}" else "Icon changed for ${apps.size} apps") +
+            if (dated) " · shows today's date" else ""
         change(themeId, apps.map { it.componentKey }, label, announce = said) {
             db.mappings().put(apps.map {
                 MappingEntity(themeId, it.componentKey, it.packageName, source, pack, drawable, customPath, isManual = true)

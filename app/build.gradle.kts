@@ -19,8 +19,8 @@ android {
         applicationId = "com.iconforge.app"
         minSdk = 26
         targetSdk = 36
-        versionCode = 27
-        versionName = "1.16.1"
+        versionCode = 28
+        versionName = "1.17"
     }
 
     // The app's own signing key (keystore/). Not the key that signs exported
