@@ -342,12 +342,12 @@ private fun ThemeRow(
     val cs = MaterialTheme.colorScheme
     val rowShape = androidx.compose.foundation.shape.RoundedCornerShape(16.dp)
     Row(
-        Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 3.dp)
+        Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp)
             .clip(rowShape)
             .background(if (active) cs.secondaryContainer else cs.surfaceContainerLow)
             .border(if (active) 1.5.dp else 1.dp, if (active) cs.primary else cs.outlineVariant, rowShape)
             .clickable(onClick = onClick)
-            .padding(start = 4.dp, end = 0.dp, top = 2.dp, bottom = 2.dp),
+            .padding(start = 4.dp, end = 0.dp, top = 8.dp, bottom = 8.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         RadioButton(selected = active, onClick = onClick)

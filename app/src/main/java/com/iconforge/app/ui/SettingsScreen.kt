@@ -26,6 +26,7 @@ import androidx.compose.material.icons.outlined.Code
 import androidx.compose.material.icons.outlined.Contrast
 import androidx.compose.material.icons.outlined.DarkMode
 import androidx.compose.material.icons.outlined.Info
+import androidx.compose.material.icons.outlined.School
 import androidx.compose.material.icons.outlined.NotificationsActive
 import androidx.compose.material.icons.outlined.Palette
 import androidx.compose.material.icons.outlined.Sync
@@ -130,6 +131,7 @@ fun SettingsScreen(vm: MainViewModel) {
             }
             Group("About") {
                 item(Icons.Outlined.Info, "Icon Mixer", "Version $version") {}
+                item(Icons.Outlined.School, "Show the intro again", "Three short pages on how Icon Mixer works") { s.setTourDone(false) }
                 item(Icons.Outlined.Code, "Source code", "github.com/${Updater.REPO}",
                     trailing = { Icon(Icons.AutoMirrored.Outlined.OpenInNew, null, tint = MaterialTheme.colorScheme.onSurfaceVariant) }) {
                     ctx.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(Updater.PAGE)))

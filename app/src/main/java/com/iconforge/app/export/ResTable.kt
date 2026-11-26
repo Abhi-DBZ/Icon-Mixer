@@ -279,7 +279,18 @@ fun parseAxml(bytes: ByteArray): Pair<List<Pair<String, String>>, XNode> {
 
 /** Icon shapes as SVG path data on a 100 × 100 canvas (same shapes as IconShape). */
 object ShapePaths {
-    fun svg(shape: String): String? = when (shape) {
+    private val memo = java.util.concurrent.ConcurrentHashMap<String, String>()
+
+    /** Complex fraction (radix 0p23) for an inset showing the foreground at [scale] (1 = -25%). */
+    fun insetFraction(scale: Float): Int {
+        val f = -(1.5 * scale - 1) / 2
+        return ((Math.round(f * (1 shl 23)).toInt()) shl 8) or 0x30
+    }
+
+    /** Outline of [shape] as path data in a 100x100 box; null for DEFAULT (the launcher decides). */
+    fun svg(shape: String): String? = memo[shape] ?: build(shape)?.also { memo[shape] = it }
+
+    private fun build(shape: String): String? = when (shape) {
         "CIRCLE" -> "M50,0A50,50 0,1 1,50,100A50,50 0,1 1,50,0Z"
         "SQUARE" -> "M0,0H100V100H0Z"
         "ROUNDED" -> "M22,0H78A22,22 0,0 1,100,22V78A22,22 0,0 1,78,100H22A22,22 0,0 1,0,78V22A22,22 0,0 1,22,0Z"
@@ -294,7 +305,49 @@ object ShapePaths {
             }
             append("Z")
         }
+        "HEXAGON" -> fit(roundedPolygon(6, 0.18))
+        "FLOWER" -> fit(polar(360) { t -> 1 + 0.065 * Math.cos(8 * t) })
+        "LEAF" -> "M50,0H90A10,10 0,0 1,100,10V50A50,50 0,0 1,50,100H10A10,10 0,0 1,0,90V50A50,50 0,0 1,50,0Z"
+        "PEBBLE" -> fit(polar(360) { t -> 1 + 0.07 * Math.cos(2 * t + 0.7) + 0.035 * Math.cos(3 * t + 2.1) })
         else -> null                                     // DEFAULT: the launcher decides
+    }
+
+    /** Closed outline from a radius function r(angle), sampled every [n]th of a turn. */
+    private fun polar(n: Int, r: (Double) -> Double): List<Pair<Double, Double>> = (0 until n).map { i ->
+        val t = 2 * Math.PI * i / n; val k = r(t)
+        Math.cos(t) * k to Math.sin(t) * k
+    }
+
+    /** Regular polygon (point at the top) with corners rounded by [round] of each side. */
+    private fun roundedPolygon(sides: Int, round: Double): List<Pair<Double, Double>> {
+        val v = (0 until sides).map { i -> val t = -Math.PI / 2 + 2 * Math.PI * i / sides; Math.cos(t) to Math.sin(t) }
+        val out = ArrayList<Pair<Double, Double>>()
+        for (i in v.indices) {
+            val p = v[(i + sides - 1) % sides]; val c = v[i]; val q = v[(i + 1) % sides]
+            // Corner as a quadratic curve, sampled: from (c→p) to (c→q) at [round] of the side.
+            val a = (c.first + (p.first - c.first) * round) to (c.second + (p.second - c.second) * round)
+            val b = (c.first + (q.first - c.first) * round) to (c.second + (q.second - c.second) * round)
+            for (j in 0..6) {
+                val u = j / 6.0; val w0 = (1 - u) * (1 - u); val w1 = 2 * u * (1 - u); val w2 = u * u
+                out += (w0 * a.first + w1 * c.first + w2 * b.first) to (w0 * a.second + w1 * c.second + w2 * b.second)
+            }
+        }
+        return out
+    }
+
+    /** Scales points to fill a 100x100 box (aspect kept, centred) and writes them as path data. */
+    private fun fit(pts: List<Pair<Double, Double>>): String {
+        val x0 = pts.minOf { it.first }; val x1 = pts.maxOf { it.first }
+        val y0 = pts.minOf { it.second }; val y1 = pts.maxOf { it.second }
+        val k = 100 / maxOf(x1 - x0, y1 - y0)
+        val dx = (100 - (x1 - x0) * k) / 2; val dy = (100 - (y1 - y0) * k) / 2
+        return buildString {
+            pts.forEachIndexed { i, (x, y) ->
+                append(if (i == 0) "M" else "L")
+                append("%.2f,%.2f".format(java.util.Locale.ROOT, (x - x0) * k + dx, (y - y0) * k + dy))
+            }
+            append("Z")
+        }
     }
 }
 
@@ -361,6 +414,8 @@ class LiveCopier(private val src: SourceRes, packageName: String) {
 
     /** Shape (SVG path, 100 × 100) adaptive icons are being rewritten into during [collect]. */
     private var reshape: String? = null
+    /** Size of the foreground inside [reshape] (1 = as designed). */
+    private var reshapeScale = 1f
 
     /**
      * Copies [drawable] into [into] under the appfilter name [alias]. False = not XML / not copyable.
@@ -370,13 +425,15 @@ class LiveCopier(private val src: SourceRes, packageName: String) {
      * already cut to that shape — still live, as the colours stay references. [shapeAll]: plain
      * (non-adaptive) XML icons should be cut too, which can't stay live, so they are refused.
      */
-    fun collect(drawable: String, alias: String, into: LiveBundle, shape: String? = null, shapeAll: Boolean = false): Boolean {
+    fun collect(drawable: String, alias: String, into: LiveBundle, shape: String? = null, shapeAll: Boolean = false,
+                scale: Float = 1f): Boolean {
         val id = src.id("drawable", drawable) ?: src.id("mipmap", drawable) ?: return false
         val xmlFiles = src.values[id].orEmpty().mapNotNull { v -> v.str?.takeIf { it.endsWith(".xml") } }
         if (xmlFiles.isEmpty()) return false
         if (shape != null && shapeAll && xmlFiles.any { f -> src.file(f)?.let { rootTag(it) } != "adaptive-icon" }) return false
         val tmp = LiveBundle()
         reshape = shape
+        reshapeScale = if (shape != null) scale else 1f
         return try {
             val key = copy(id, tmp, into)
             tmp.aliases[alias] = key
@@ -387,7 +444,7 @@ class LiveCopier(private val src: SourceRes, packageName: String) {
         } catch (_: RuntimeException) {
             false
         } finally {
-            reshape = null
+            reshape = null; reshapeScale = 1f
         }
     }
 
@@ -419,8 +476,9 @@ class LiveCopier(private val src: SourceRes, packageName: String) {
                 XAttr(ns, "pathData", 0x01010405, 0x03, 0, shape),
             ))))))
         }
-        val minus25 = ((-(1 shl 21)) shl 8) or 0x30                           // complex fraction -25%, radix 0p23
-        val insetAttrs = listOf(XAttr(ns, "inset", 0x010104b5, 0x06, minus25, null)) +
+        // The 108dp layer shows its middle 72dp: inset -25% at normal size, scaled about the centre.
+        val inset = ShapePaths.insetFraction(reshapeScale)
+        val insetAttrs = listOf(XAttr(ns, "inset", 0x010104b5, 0x06, inset, null)) +
             fg.attrs.filter { it.resId == ATTR_DRAWABLE }.map { XAttr(ns, "drawable", ATTR_DRAWABLE, it.type, it.data, it.str) }
         items += XNode("item", children = listOf(XNode("inset", insetAttrs, fg.children)))
         return encodeAxml(XNode("layer-list", children = items), listOf("android" to ns))
@@ -467,7 +525,7 @@ class LiveCopier(private val src: SourceRes, packageName: String) {
     private fun keyOf(id: Int): LiveKey {
         val (type, _) = src.names[id] ?: throw Unsupported("unknown id ${Integer.toHexString(id)}")
         // Shaped copies get their own names, so a shaped and a plain copy can't be mixed up.
-        val shapeTag = reshape?.let { "s" + Integer.toHexString(it.hashCode() and 0xFFFF) + "_" } ?: ""
+        val shapeTag = reshape?.let { "s" + Integer.toHexString((it + reshapeScale).hashCode() and 0xFFFF) + "_" } ?: ""
         return LiveKey(type, prefix + shapeTag + Integer.toHexString(id))
     }
 

@@ -48,6 +48,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     val apps = a.db.apps().observe().state(this, emptyList())
     val packs = a.db.packs().observe().state(this, emptyList())
     val undoLabel = repo.undoLabel
+    val undoable = repo.undoable
 
     val activeTheme: StateFlow<ThemeEntity?> = combine(themes, a.settings.activeTheme) { list, id ->
         list.firstOrNull { it.id == id } ?: list.firstOrNull()
@@ -176,7 +177,15 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     fun rename(id: Long, name: String) = work(null) { repo.rename(id, name) }
     fun duplicate(id: Long) = work(null) { repo.duplicate(id)?.let { say("Theme duplicated") } }
-    fun delete(id: Long) = work(null) { repo.delete(id); say("Theme deleted") }
+    fun delete(id: Long) = work(null) {
+        val gone = repo.delete(id) ?: return@work
+        // Images are kept a little while, so Undo brings the theme back complete.
+        val purge = viewModelScope.launch { kotlinx.coroutines.delay(30_000); repo.purgeImages(gone) }
+        say("\"${gone.theme.name}\" deleted", "Undo") {
+            purge.cancel()
+            viewModelScope.launch { repo.restore(gone) }
+        }
+    }
     fun setIconShape(id: Long, shape: String) = work(null) { repo.setIconShape(id, shape) }
     fun setBasePack(id: Long, pack: String?) = work(null) { repo.setBasePack(id, pack) }
 
@@ -434,6 +443,7 @@ class ExportViewModel(application: Application, val themeId: Long) : AndroidView
     }
 
     fun setIconShape(shape: String) = viewModelScope.launch { a.repo.setIconShape(themeId, shape) }
+    fun setIconScale(scale: Float) = viewModelScope.launch { a.repo.setIconScale(themeId, scale) }
     fun isInstalled(t: ThemeEntity) = a.exporter.isInstalled(t)
 
     /** Icon Mixer packs installed on the phone (refreshed when the screen resumes). */

@@ -1,6 +1,7 @@
 package com.iconforge.app.ui
 
 import android.os.Build
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -91,20 +92,23 @@ fun IconForgeTheme(settings: Settings, content: @Composable () -> Unit) {
 /** Shape adaptive icons are previewed in (set per screen from the theme being edited). */
 val LocalIconShape = staticCompositionLocalOf { IconShape.DEFAULT }
 
+/** Size of the icon inside [LocalIconShape] (theme setting; 1 = as designed). */
+val LocalIconScale = staticCompositionLocalOf { 1f }
+
 /** Light/dark mode icons are drawn in (null = the phone's mode); the home preview switches it. */
 val LocalIconNight = staticCompositionLocalOf<Boolean?> { null }
 
 /** Loads an icon asynchronously through the shared cache. */
 @Composable
 fun IconImage(src: IconSrc?, size: Dp, modifier: Modifier = Modifier, dim: Boolean = false,
-              shape: IconShape = LocalIconShape.current) {
+              shape: IconShape = LocalIconShape.current, fgScale: Float = LocalIconScale.current) {
     val ctx = LocalContext.current
     val px = with(LocalDensity.current) { size.roundToPx() }.coerceIn(24, 384)
     val loader = ctx.app.icons
     val night = LocalIconNight.current
-    val bmp by produceState<ImageBitmap?>(src?.let { loader.peek(it, px, shape, night)?.asImageBitmap() }, src?.key, px, shape, night) {
-        value = src?.let { loader.peek(it, px, shape, night)?.asImageBitmap() }
-        if (src != null && value == null) value = loader.bitmap(src, px, shape, night)?.asImageBitmap()
+    val bmp by produceState<ImageBitmap?>(src?.let { loader.peek(it, px, shape, night, fgScale)?.asImageBitmap() }, src?.key, px, shape, night, fgScale) {
+        value = src?.let { loader.peek(it, px, shape, night, fgScale)?.asImageBitmap() }
+        if (src != null && value == null) value = loader.bitmap(src, px, shape, night, fgScale)?.asImageBitmap()
     }
     Box(modifier.size(size), contentAlignment = Alignment.Center) {
         val b = bmp
@@ -202,7 +206,7 @@ fun ShapeDialog(current: IconShape, sample: IconSrc?, onDismiss: () -> Unit, onP
         onDismissRequest = onDismiss,
         title = { Text("Icon shape") },
         text = {
-            Column {
+            Column(Modifier.verticalScroll(androidx.compose.foundation.rememberScrollState())) {
                 Text(
                     "Applies to adaptive icons (most apps' own icons and Material You style packs). " +
                         "Regular pack icons keep their designed shape. Useful on ColorOS / OxygenOS, whose launchers can't change it.",

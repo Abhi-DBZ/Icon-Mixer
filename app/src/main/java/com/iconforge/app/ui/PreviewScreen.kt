@@ -122,6 +122,7 @@ fun PreviewScreen(main: MainViewModel, nav: NavHostController, themeId: Long) {
     }
 
     val shape = IconShape.of(theme?.iconShape)
+    val fgScale = theme?.iconScale ?: 1f
     val sorted = remember(apps) { apps.sortedBy { it.label.lowercase() } }
     val dock = remember(sorted, byKey) { sorted.filter { it.componentKey in byKey }.take(columns) }
     val onPhoto = photo != null
@@ -129,7 +130,7 @@ fun PreviewScreen(main: MainViewModel, nav: NavHostController, themeId: Long) {
     val label = if (dark || onPhoto) TextStyle(color = Color.White, fontSize = 11.sp, shadow = Shadow(Color.Black.copy(alpha = 0.7f), Offset(0f, 1f), 4f))
         else TextStyle(color = ink, fontSize = 11.sp)
 
-    CompositionLocalProvider(LocalIconShape provides shape, LocalIconNight provides dark) {
+    CompositionLocalProvider(LocalIconShape provides shape, LocalIconNight provides dark, LocalIconScale provides fgScale) {
         Box(Modifier.fillMaxSize().background(Brush.verticalGradient(gradient))) {
             photo?.let { Image(it, null, Modifier.fillMaxSize(), contentScale = ContentScale.Crop) }
             Column(Modifier.fillMaxSize().statusBarsPadding().navigationBarsPadding()) {

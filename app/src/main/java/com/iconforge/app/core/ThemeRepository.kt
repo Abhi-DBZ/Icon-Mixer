@@ -40,6 +40,10 @@ class ThemeRepository(
     private val _undoLabel = MutableStateFlow<String?>(null)
     /** Description of the change Undo would revert, or null. */
     val undoLabel: StateFlow<String?> = _undoLabel
+
+    private val _undoable = kotlinx.coroutines.flow.MutableSharedFlow<String>(extraBufferCapacity = 4)
+    /** Text for an "Undo" snackbar, sent after a hand-made icon change. */
+    val undoable: kotlinx.coroutines.flow.SharedFlow<String> = _undoable
     private val syncLock = Mutex()
 
     val customDir: File get() = File(context.filesDir, "custom").apply { mkdirs() }
@@ -80,6 +84,11 @@ class ThemeRepository(
         if (t.iconShape != shape) db.themes().update(t.copy(iconShape = shape, updatedAt = System.currentTimeMillis()))
     }
 
+    suspend fun setIconScale(id: Long, scale: Float) {
+        val t = db.themes().get(id) ?: return
+        if (t.iconScale != scale) db.themes().update(t.copy(iconScale = scale, updatedAt = System.currentTimeMillis()))
+    }
+
     suspend fun duplicate(id: Long): Long? {
         val t = db.themes().get(id) ?: return null
         val now = System.currentTimeMillis()
@@ -92,15 +101,34 @@ class ThemeRepository(
         return newId
     }
 
-    suspend fun delete(id: Long) {
-        val mine = db.mappings().forTheme(id).mapNotNull { it.customPath }.toSet()
+    /** A deleted theme, kept in memory so the delete can be undone. */
+    class DeletedTheme(val theme: ThemeEntity, val mappings: List<MappingEntity>, val wasActive: Boolean)
+
+    /** Deletes the theme but keeps its images until [purgeImages]; returns what [restore] needs. */
+    suspend fun delete(id: Long): DeletedTheme? {
+        val t = db.themes().get(id) ?: return null
+        val gone = DeletedTheme(t, db.mappings().forTheme(id), settings.activeTheme.value == id)
         db.mappings().deleteTheme(id)
         db.themes().delete(id)
-        // Remove custom images no other theme uses.
+        undoStack.removeAll { it.themeId == id }; publishUndo()
+        if (gone.wasActive) settings.setActiveTheme(db.themes().all().maxByOrNull { it.updatedAt }?.id ?: 0L)
+        return gone
+    }
+
+    /** Puts a deleted theme back exactly as it was (same id, icons and pack name). */
+    suspend fun restore(d: DeletedTheme) {
+        if (db.themes().get(d.theme.id) != null) return
+        db.themes().insert(d.theme)
+        db.mappings().put(d.mappings)
+        if (d.wasActive) settings.setActiveTheme(d.theme.id)
+    }
+
+    /** Removes a deleted theme's own images that no other theme uses (once Undo is gone). */
+    suspend fun purgeImages(d: DeletedTheme) {
+        if (db.themes().get(d.theme.id) != null) return
+        val mine = d.mappings.mapNotNull { it.customPath }.toSet()
         val used = db.themes().all().flatMap { t -> db.mappings().forTheme(t.id).mapNotNull { it.customPath } }.toSet()
         (mine - used).forEach { File(it).delete() }
-        undoStack.removeAll { it.themeId == id }; publishUndo()
-        if (settings.activeTheme.value == id) settings.setActiveTheme(db.themes().all().maxByOrNull { it.updatedAt }?.id ?: 0L)
     }
 
     suspend fun markExported(id: Long) {
@@ -115,7 +143,8 @@ class ThemeRepository(
 
     // ------------------------------------------------------------ mapping edits (undoable)
 
-    private suspend fun change(themeId: Long, keys: Collection<String>?, label: String, block: suspend () -> Unit) {
+    private suspend fun change(themeId: Long, keys: Collection<String>?, label: String, announce: String? = null,
+                               block: suspend () -> Unit) {
         val before = if (keys == null) db.mappings().forTheme(themeId) else db.mappings().get(themeId, keys.toList())
         block()
         val after = if (keys == null) db.mappings().forTheme(themeId) else db.mappings().get(themeId, keys.toList())
@@ -124,6 +153,7 @@ class ThemeRepository(
             undoStack.addLast(UndoStep(themeId, label, before, affected))
             while (undoStack.size > 50) undoStack.removeFirst()
             publishUndo()
+            announce?.let { _undoable.tryEmit(it) }
         }
         touch(themeId)
     }
@@ -142,7 +172,8 @@ class ThemeRepository(
     suspend fun assign(themeId: Long, apps: List<InstalledApp>, source: String, pack: String? = null,
                        drawable: String? = null, customPath: String? = null) {
         val label = if (apps.size == 1) "Icon for ${apps[0].label}" else "Icon for ${apps.size} apps"
-        change(themeId, apps.map { it.componentKey }, label) {
+        val said = if (apps.size == 1) "Icon changed for ${apps[0].label}" else "Icon changed for ${apps.size} apps"
+        change(themeId, apps.map { it.componentKey }, label, announce = said) {
             db.mappings().put(apps.map {
                 MappingEntity(themeId, it.componentKey, it.packageName, source, pack, drawable, customPath, isManual = true)
             })
@@ -152,7 +183,8 @@ class ThemeRepository(
 
     /** Remove the assignment, so the apps show up as missing. */
     suspend fun clear(themeId: Long, keys: List<String>) =
-        change(themeId, keys, "Removed ${keys.size} icon(s)") { db.mappings().delete(themeId, keys) }
+        change(themeId, keys, "Removed ${keys.size} icon(s)",
+            announce = if (keys.size == 1) "Icon removed" else "${keys.size} icons removed") { db.mappings().delete(themeId, keys) }
 
     /** Back to what the theme's base pack gives (or nothing). */
     suspend fun resetApps(themeId: Long, keys: List<String>) {
@@ -281,7 +313,8 @@ class ThemeRepository(
 
     /** Redraw the apps' own icons in a pack's style. */
     suspend fun generate(themeId: Long, apps: List<InstalledApp>, stylePack: String) =
-        change(themeId, apps.map { it.componentKey }, "Generated ${apps.size} icon(s)") {
+        change(themeId, apps.map { it.componentKey }, "Generated ${apps.size} icon(s)",
+            announce = if (apps.size == 1) "Icon generated" else "${apps.size} icons generated") {
             db.mappings().put(apps.map {
                 MappingEntity(themeId, it.componentKey, it.packageName, Source.GENERATED, stylePack, null, null, isManual = true)
             })

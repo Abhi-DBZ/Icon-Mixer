@@ -104,6 +104,7 @@ fun PickerScreen(main: MainViewModel, nav: NavHostController, themeId: Long, key
     val scope = androidx.compose.runtime.rememberCoroutineScope()
     val pickerTheme by vm.theme.collectAsState()
     val shape = IconShape.of(pickerTheme?.iconShape)
+    val fgScale = pickerTheme?.iconScale ?: 1f
     var preview by remember { mutableStateOf<Candidate?>(null) }
     var adjusting by remember { mutableStateOf(false) }
     val app = targets.firstOrNull()
@@ -146,7 +147,7 @@ fun PickerScreen(main: MainViewModel, nav: NavHostController, themeId: Long, key
         LaunchedEffect(query, selected) { if (gridState.firstVisibleItemIndex > 0) gridState.scrollToItem(0) }
 
         // imePadding: the grid ends at the top of the keyboard instead of running under it.
-      CompositionLocalProvider(LocalIconShape provides shape) {
+      CompositionLocalProvider(LocalIconShape provides shape, LocalIconScale provides fgScale) {
         Column(Modifier.fillMaxSize().padding(pad).imePadding()) {
             // One row of actions (icon + short label) instead of chips that wrap onto several lines.
             AnimatedVisibility(visible = !searching) {
@@ -308,7 +309,7 @@ fun PickerScreen(main: MainViewModel, nav: NavHostController, themeId: Long, key
         // Fully expanded + compact, so the action buttons are always on screen.
         val sheet = rememberModalBottomSheetState(skipPartiallyExpanded = true)
         ModalBottomSheet(onDismissRequest = { preview = null }, sheetState = sheet) {
-          CompositionLocalProvider(LocalIconShape provides shape) {
+          CompositionLocalProvider(LocalIconShape provides shape, LocalIconScale provides fgScale) {
             Column(Modifier.fillMaxWidth().padding(horizontal = 20.dp).navigationBarsPadding()) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     IconImage(IconSrc.Pack(c.pack, c.drawable), 72.dp)

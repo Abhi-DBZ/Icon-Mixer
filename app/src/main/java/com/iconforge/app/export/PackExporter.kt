@@ -130,6 +130,7 @@ class PackExporter(
         val theme = db.themes().get(themeId) ?: error("Theme not found")
         val size = settings.exportSize.value
         val shape = com.iconforge.app.core.IconShape.of(theme.iconShape)
+        val fg = theme.iconScale
         val apps = db.apps().all().associateBy { it.componentKey }
         val maps = db.mappings().forTheme(themeId).sortedBy { apps[it.componentKey]?.label?.lowercase() ?: "~" + it.componentKey }
 
@@ -163,8 +164,8 @@ class PackExporter(
             bySource[src.key]?.let { return it }
             // Draw in light and dark mode; keep the dark picture only when it differs
             // (packs with day/night icons), so the launcher can switch with the phone's theme.
-            val bmp = loader.renderForExport(src, size, shape, night = false) ?: return null
-            val dark = loader.renderForExport(src, size, shape, night = true)?.takeIf { !it.sameAs(bmp) }
+            val bmp = loader.renderForExport(src, size, shape, night = false, fgScale = fg) ?: return null
+            val dark = loader.renderForExport(src, size, shape, night = true, fgScale = fg)?.takeIf { !it.sameAs(bmp) }
             val name = unique(base)
             icons += PackIcon(name, bmp.png(), dark?.png())
             bySource[src.key] = name
@@ -179,7 +180,7 @@ class PackExporter(
             val c = copier(pack) ?: return null
             val name = unique(base)
             // With a theme shape, adaptive icons are rewritten already cut to it (still live).
-            val ok = c.collect(drawable, name, bundle, shape = ShapePaths.svg(shape.name), shapeAll = settings.shapeAllIcons.value)
+            val ok = c.collect(drawable, name, bundle, shape = ShapePaths.svg(shape.name), shapeAll = settings.shapeAllIcons.value, scale = fg)
             return if (ok) name.also { liveBySource[k] = it } else { names.remove(name); null }
         }
 
@@ -207,7 +208,7 @@ class PackExporter(
                     val newPrefix = "cal_" + ApkBuilder.resName(m.packageName) + "_"
                     val ok = (1..31).all { d ->
                         val n = newPrefix + d
-                        names.add(n) && loader.renderForExport(IconSrc.Pack(m.iconPack, prefix + d), size, shape)
+                        names.add(n) && loader.renderForExport(IconSrc.Pack(m.iconPack, prefix + d), size, shape, fgScale = fg)
                             ?.let { icons += PackIcon(n, it.png()); true } == true
                     }
                     if (ok) calendars += PackCalendar(m.packageName, cls, newPrefix)
@@ -238,12 +239,12 @@ class PackExporter(
 
         progress(0.88f, "Packing")
         sources.forEach { it.close() }
-        val previewPngs = previews.mapNotNull { loader.renderForExport(it, size, shape)?.png() }
+        val previewPngs = previews.mapNotNull { loader.renderForExport(it, size, shape, fgScale = fg)?.png() }
         val collage = previewPngs.takeIf { it.isNotEmpty() }?.let { PackIcon(unique("ic_pack_preview"), collage(it, size)) }
         val json = JSONObject().apply {
             put("format", "iconforge-theme"); put("version", 1)
             put("name", theme.name); put("createdAt", theme.createdAt); put("exportedAt", System.currentTimeMillis())
-            put("basePack", theme.basePack ?: JSONObject.NULL); put("iconSize", size); put("iconShape", theme.iconShape)
+            put("basePack", theme.basePack ?: JSONObject.NULL); put("iconSize", size); put("iconShape", theme.iconShape); put("iconScale", theme.iconScale.toDouble())
             put("packageName", packageNameFor(theme)); put("mappings", jsonMaps)
         }
         RenderedTheme(theme, packageNameFor(theme), icons, outMaps, json, collage, calendars, bundle.takeIf { !it.isEmpty })
@@ -396,6 +397,7 @@ class PackExporter(
         json.optString("packageName").takeIf { it.startsWith(PACK_PREFIX) }?.let { repo.setPackSuffix(id, it.removePrefix(PACK_PREFIX)) }
         if (base != null) repo.setBasePack(id, base)
         json.optString("iconShape").takeIf { it.isNotEmpty() }?.let { repo.setIconShape(id, it) }
+        json.optDouble("iconScale", 1.0).toFloat().takeIf { it in 0.5f..1.5f && it != 1f }?.let { repo.setIconScale(id, it) }
         val dir = File(repo.customDir, "t$id").apply { mkdirs() }
         val arr = json.optJSONArray("mappings") ?: JSONArray()
         val out = ArrayList<MappingEntity>()

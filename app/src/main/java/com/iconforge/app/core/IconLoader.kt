@@ -77,27 +77,97 @@ class IconLoader(private val context: Context, private val packs: IconPacks, pri
         override fun sizeOf(key: String, value: Bitmap) = value.allocationByteCount / 1024
     }
 
-    private fun cacheKey(src: IconSrc, sizePx: Int, shape: IconShape, night: Boolean?) =
-        "${src.key}@$sizePx#${shape.name}${if (settings.shapeAllIcons.value) "+all" else ""}~$night"
+    private fun cacheKey(src: IconSrc, sizePx: Int, shape: IconShape, night: Boolean?, fgScale: Float) =
+        "${src.key}@$sizePx#${shape.name}${if (settings.shapeAllIcons.value) "+all" else ""}" +
+            "${if (shape != IconShape.DEFAULT && fgScale != 1f) "*$fgScale" else ""}~$night"
 
-    fun peek(src: IconSrc, sizePx: Int, shape: IconShape = IconShape.DEFAULT, night: Boolean? = null): Bitmap? =
-        cache.get(cacheKey(src, sizePx, shape, night))
+    fun peek(src: IconSrc, sizePx: Int, shape: IconShape = IconShape.DEFAULT, night: Boolean? = null, fgScale: Float = 1f): Bitmap? =
+        cache.get(cacheKey(src, sizePx, shape, night, fgScale))
 
     /** [night]: draw pack icons in light/dark mode (null = the phone's current mode). */
-    suspend fun bitmap(src: IconSrc, sizePx: Int, shape: IconShape = IconShape.DEFAULT, night: Boolean? = null): Bitmap? {
-        val ck = cacheKey(src, sizePx, shape, night)
+    suspend fun bitmap(src: IconSrc, sizePx: Int, shape: IconShape = IconShape.DEFAULT, night: Boolean? = null, fgScale: Float = 1f): Bitmap? {
+        val ck = cacheKey(src, sizePx, shape, night, fgScale)
         cache.get(ck)?.let { return it }
-        return withContext(Dispatchers.IO) { renderForExport(src, sizePx, shape, night)?.also { cache.put(ck, it) } }
+        return withContext(Dispatchers.IO) {
+            val file = diskFile(ck, src, night)
+            val cached = file?.takeIf { it.exists() }?.let { runCatching { BitmapFactory.decodeFile(it.path) }.getOrNull() }
+            (cached ?: renderForExport(src, sizePx, shape, night, fgScale)?.also { b -> file?.let { saveToDisk(b, it) } })
+                ?.also { cache.put(ck, it) }
+        }
+    }
+
+    // ---------------------------------------------------------------- disk cache
+    // Rendered icons are kept on disk, so big themes open fast after the first time. The file
+    // name carries everything the picture depends on: app / pack versions, the image file's
+    // date, dark mode and the wallpaper colours (Material You icons), so an old picture is
+    // never shown; files no longer used are trimmed by age.
+
+    private val diskDir by lazy { File(context.cacheDir, "icons").apply { mkdirs() } }
+    private val stamps = java.util.concurrent.ConcurrentHashMap<String, Long>()
+
+    private fun pkgStamp(pkg: String): Long = stamps.getOrPut(pkg) {
+        runCatching {
+            val pi = pm.getPackageInfo(pkg, 0)
+            pi.lastUpdateTime xor (if (Build.VERSION.SDK_INT >= 28) pi.longVersionCode else @Suppress("DEPRECATION") pi.versionCode.toLong())
+        }.getOrDefault(0L)
+    }
+
+    private fun srcStamp(src: IconSrc): String = when (src) {
+        is IconSrc.App -> pkgStamp(src.packageName).toString()
+        is IconSrc.Pack -> pkgStamp(src.pack).toString()
+        is IconSrc.FileImage -> File(src.path).lastModified().toString()
+        is IconSrc.Generated -> "${pkgStamp(src.pack)}.${pkgStamp(src.packageName)}"
+        is IconSrc.Adjusted -> srcStamp(src.base)
+    }
+
+    /** Things outside the icon that change how it looks: dark mode and wallpaper colours. */
+    private fun lookStamp(night: Boolean?): String {
+        val cfg = context.resources.configuration
+        val dark = night ?: ((cfg.uiMode and android.content.res.Configuration.UI_MODE_NIGHT_MASK) ==
+            android.content.res.Configuration.UI_MODE_NIGHT_YES)
+        val palette = if (Build.VERSION.SDK_INT >= 31) runCatching {
+            listOf(android.R.color.system_accent1_500, android.R.color.system_accent2_500,
+                android.R.color.system_accent3_500, android.R.color.system_neutral1_500)
+                .joinToString(".") { Integer.toHexString(context.getColor(it)) }
+        }.getOrDefault("") else ""
+        return "$dark/$palette/${cfg.densityDpi}"
+    }
+
+    private fun diskFile(ck: String, src: IconSrc, night: Boolean?): File? = runCatching {
+        val key = "$ck|${srcStamp(src)}|${lookStamp(night)}"
+        val md = java.security.MessageDigest.getInstance("SHA-1").digest(key.toByteArray())
+        File(diskDir, md.joinToString("") { "%02x".format(it) } + ".png")
+    }.getOrNull()
+
+    private fun saveToDisk(b: Bitmap, f: File) {
+        runCatching {
+            val tmp = File(f.path + ".tmp")
+            tmp.outputStream().use { b.compress(Bitmap.CompressFormat.PNG, 100, it) }
+            tmp.renameTo(f)
+        }
+    }
+
+    /** Keeps the disk cache under [maxBytes] by deleting the oldest files. */
+    fun trimDiskCache(maxBytes: Long = 60L shl 20) {
+        val files = diskDir.listFiles()?.toList() ?: return
+        var total = files.sumOf { it.length() }
+        if (total <= maxBytes) return
+        for (f in files.sortedBy { it.lastModified() }) {
+            if (total <= maxBytes * 2 / 3) break
+            total -= f.length(); f.delete()
+        }
     }
 
     /** Light/dark mode forced for the render running on this thread (null = phone's current mode). */
     private val forcedNight = ThreadLocal<Boolean?>()
+    /** Size of adaptive foregrounds inside the shape, for the render running on this thread. */
+    private val forcedScale = ThreadLocal<Float?>()
 
     /** Full-quality bitmap for export (not cached). [night]: draw pack icons in light/dark mode. */
-    fun renderForExport(src: IconSrc, sizePx: Int, shape: IconShape = IconShape.DEFAULT, night: Boolean? = null): Bitmap? {
-        val prev = forcedNight.get()
-        forcedNight.set(night)
-        return try { runCatching { render(src, sizePx, shape) }.getOrNull() } finally { forcedNight.set(prev) }
+    fun renderForExport(src: IconSrc, sizePx: Int, shape: IconShape = IconShape.DEFAULT, night: Boolean? = null, fgScale: Float = 1f): Bitmap? {
+        val prev = forcedNight.get(); val prevScale = forcedScale.get()
+        forcedNight.set(night); forcedScale.set(fgScale)
+        return try { runCatching { render(src, sizePx, shape) }.getOrNull() } finally { forcedNight.set(prev); forcedScale.set(prevScale) }
     }
 
     private fun render(src: IconSrc, sizePx: Int, shape: IconShape): Bitmap? = when (src) {
@@ -110,7 +180,7 @@ class IconLoader(private val context: Context, private val packs: IconPacks, pri
             if (shape != IconShape.DEFAULT && d is AdaptiveIconDrawable) renderAdaptive(d, sizePx, shape)
             else d.toBitmap(sizePx, sizePx, Bitmap.Config.ARGB_8888).let {
                 // "Apply the shape to every icon": cut ordinary (non-adaptive) icons too.
-                if (settings.shapeAllIcons.value && shape != IconShape.DEFAULT) clipTo(it, shape) else it
+                if (settings.shapeAllIcons.value && shape != IconShape.DEFAULT) clipTo(zoom(it, fgScale()), shape) else it
             }
         }
     }
@@ -160,6 +230,18 @@ class IconLoader(private val context: Context, private val packs: IconPacks, pri
         val mask = PackLookAnalyzer.logoMask(px, s) ?: return null
         val alpha = IntArray(s * s) { if (mask[it].toInt() != 0) 0xFF000000.toInt() else 0 }
         return Bitmap.createBitmap(alpha, s, s, Bitmap.Config.ARGB_8888)
+    }
+
+    private fun fgScale(): Float = (forcedScale.get() ?: 1f).coerceIn(0.5f, 1.5f)
+
+    /** [b] scaled by [k] about its centre, on a canvas of the same size. */
+    private fun zoom(b: Bitmap, k: Float): Bitmap {
+        if (k == 1f) return b
+        val s = b.width
+        val out = Bitmap.createBitmap(s, s, Bitmap.Config.ARGB_8888)
+        val side = s * k; val off = (s - side) / 2f
+        Canvas(out).drawBitmap(b, null, RectF(off, off, off + side, off + side), Paint(Paint.FILTER_BITMAP_FLAG or Paint.ANTI_ALIAS_FLAG))
+        return out
     }
 
     /** Keeps only the part of [b] inside [shape]. */
@@ -256,8 +338,11 @@ class IconLoader(private val context: Context, private val packs: IconPacks, pri
         val layers = Bitmap.createBitmap(s, s, Bitmap.Config.ARGB_8888)
         val lc = Canvas(layers)
         val inset = s / 4
-        listOfNotNull(d.background, d.foreground).forEach {
-            it.setBounds(-inset, -inset, s + inset, s + inset)
+        d.background?.let { it.setBounds(-inset, -inset, s + inset, s + inset); it.draw(lc) }
+        d.foreground?.let {
+            // The foreground can be drawn bigger or smaller inside the shape (theme setting).
+            val side = s * 1.5f * fgScale(); val off = ((s - side) / 2f).toInt()
+            it.setBounds(off, off, s - off, s - off)
             it.draw(lc)
         }
         val out = Bitmap.createBitmap(s, s, Bitmap.Config.ARGB_8888)
@@ -292,7 +377,10 @@ class IconLoader(private val context: Context, private val packs: IconPacks, pri
             ?.let { android.graphics.drawable.BitmapDrawable(context.resources, it) }
     }
 
-    fun clear() = cache.evictAll()
+    fun clear() { cache.evictAll(); stamps.clear() }
+
+    /** An app or pack was updated: its pictures are drawn again (new file names). */
+    fun forget(pkg: String) { stamps.remove(pkg) }
 }
 
 /** Shapes adaptive icons can be cut into (launchers on ColorOS/OxygenOS can't change it). */
@@ -302,11 +390,21 @@ enum class IconShape(val label: String) {
     SQUIRCLE("Squircle"),
     ROUNDED("Rounded square"),
     TEARDROP("Teardrop"),
-    SQUARE("Square");
+    SQUARE("Square"),
+    HEXAGON("Hexagon"),
+    FLOWER("Flower"),
+    LEAF("Leaf"),
+    PEBBLE("Pebble");
 
     fun path(s: Float): Path = Path().apply {
         val r = RectF(0f, 0f, s, s)
         when (this@IconShape) {
+            HEXAGON, FLOWER, LEAF, PEBBLE -> {
+                // Drawn from the same outline the live export uses (100x100 box).
+                addPath(androidx.core.graphics.PathParser.createPathFromPathData(
+                    com.iconforge.app.export.ShapePaths.svg(name)!!))
+                transform(android.graphics.Matrix().apply { setScale(s / 100f, s / 100f) })
+            }
             DEFAULT, SQUARE -> addRect(r, Path.Direction.CW)
             CIRCLE -> addOval(r, Path.Direction.CW)
             ROUNDED -> addRoundRect(r, s * 0.22f, s * 0.22f, Path.Direction.CW)

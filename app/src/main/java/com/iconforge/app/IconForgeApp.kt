@@ -61,12 +61,13 @@ class IconForgeApp : Application() {
         Notifications.createChannel(this)
         NewAppWorker.schedule(this)
         UpdateCheckWorker.schedule(this)
+        scope.launch(kotlinx.coroutines.Dispatchers.IO) { runCatching { icons.trimDiskCache() } }
 
         // While the app process is alive, react to installs immediately.
         getSystemService(LauncherApps::class.java).registerCallback(object : LauncherApps.Callback() {
-            override fun onPackageAdded(packageName: String, user: UserHandle) = changed(user)
+            override fun onPackageAdded(packageName: String, user: UserHandle) { icons.forget(packageName); changed(user) }
             override fun onPackageRemoved(packageName: String, user: UserHandle) = changed(user)
-            override fun onPackageChanged(packageName: String, user: UserHandle) = changed(user)
+            override fun onPackageChanged(packageName: String, user: UserHandle) { icons.forget(packageName); changed(user) }
             override fun onPackagesAvailable(names: Array<out String>, user: UserHandle, replacing: Boolean) = changed(user)
             override fun onPackagesUnavailable(names: Array<out String>, user: UserHandle, replacing: Boolean) = changed(user)
         })

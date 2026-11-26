@@ -24,6 +24,7 @@ class Settings(context: Context) {
     private val _liveColours = bool("liveColours", false)
     private val _shapeAllIcons = bool("shapeAllIcons", false)
     private val _autoUpdateCheck = bool("autoUpdateCheck", true)
+    private val _tourDone = bool("tourDone", false)
 
     val themeMode: StateFlow<Int> = _themeMode
     val pureBlack: StateFlow<Boolean> = _pureBlack
@@ -45,6 +46,9 @@ class Settings(context: Context) {
     val shapeAllIcons: StateFlow<Boolean> = _shapeAllIcons
     /** Look for a new Icon Mixer release on GitHub once a day. */
     val autoUpdateCheck: StateFlow<Boolean> = _autoUpdateCheck
+    /** The three-page intro has been seen. */
+    val tourDone: StateFlow<Boolean> = _tourDone
+    fun setTourDone(v: Boolean) { _tourDone.value = v; prefs.edit().putBoolean("tourDone", v).apply() }
 
     fun setThemeMode(v: Int) { _themeMode.value = v; prefs.edit().putInt("themeMode", v).apply() }
     fun setPureBlack(v: Boolean) { _pureBlack.value = v; prefs.edit().putBoolean("pureBlack", v).apply() }

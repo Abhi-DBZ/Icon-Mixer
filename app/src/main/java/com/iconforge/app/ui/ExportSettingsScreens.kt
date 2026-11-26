@@ -6,6 +6,8 @@ import android.provider.Settings as AndroidSettings
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.ui.graphics.asComposePath
 import androidx.compose.material.icons.outlined.AutoAwesome
 import androidx.compose.material.icons.outlined.Contrast
@@ -217,6 +219,7 @@ fun ExportScreen(nav: NavHostController, themeId: Long) {
                     OptionLabel("Icon shape · adaptive icons")
                     ShapeSelector(IconShape.of(t.iconShape)) { vm.setIconShape(it.name) }
                     if (t.iconShape != "DEFAULT") {
+                        InnerSizeSlider(t.iconScale) { vm.setIconScale(it) }
                         val all by vm.settings.shapeAllIcons.collectAsState()
                         SwitchRow("Shape every icon", "Also icons that aren't adaptive", all) { vm.settings.setShapeAllIcons(it) }
                     }
@@ -296,27 +299,42 @@ private fun SizePicker(themeId: Long, shape: IconShape, selected: Int, onPick: (
     Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
         sizes.forEachIndexed { i, (px, letter) ->
             val on = selected == px
-            val tile = androidx.compose.foundation.shape.RoundedCornerShape(16.dp)
+            val tile = androidx.compose.foundation.shape.RoundedCornerShape(12.dp)
             Column(
                 Modifier.weight(1f).clip(tile)
                     .background(if (on) cs.primaryContainer else cs.surfaceContainerHighest)
                     .border(if (on) 2.dp else 1.dp, if (on) cs.primary else cs.outlineVariant, tile)
                     .clickable { onPick(px) }
-                    .padding(vertical = 12.dp),
+                    .padding(vertical = 6.dp),
                 horizontalAlignment = Alignment.CenterHorizontally,
             ) {
                 val fg = if (on) cs.onPrimaryContainer else cs.onSurface
-                Text(letter, style = MaterialTheme.typography.titleLarge, color = fg,
-                    fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold)
-                Text("$px px", style = MaterialTheme.typography.labelMedium, color = fg)
+                Text("$letter · $px", style = MaterialTheme.typography.titleSmall, color = fg,
+                    fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold, maxLines = 1)
                 Text(bytes?.getOrNull(i)?.let { "≈ ${((it + 512) / 1024).coerceAtLeast(1)} KB" } ?: "…",
-                    style = MaterialTheme.typography.labelSmall,
+                    style = MaterialTheme.typography.labelSmall, maxLines = 1,
                     color = if (on) cs.onPrimaryContainer.copy(alpha = 0.8f) else cs.onSurfaceVariant)
             }
         }
     }
-    Text("Size of each icon in the pack", style = MaterialTheme.typography.bodySmall, color = cs.onSurfaceVariant,
-        modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 6.dp))
+}
+
+/** How big the icon sits inside the shape (80-120 %); saved when the finger lifts. */
+@Composable
+private fun InnerSizeSlider(saved: Float, onSave: (Float) -> Unit) {
+    var v by remember(saved) { mutableStateOf(saved) }
+    val cs = MaterialTheme.colorScheme
+    Row(Modifier.fillMaxWidth().padding(start = 16.dp, end = 8.dp, top = 6.dp), verticalAlignment = Alignment.CenterVertically) {
+        Text("Icon size in shape", style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f))
+        Text("${Math.round(v * 100)}%", style = MaterialTheme.typography.labelLarge, color = cs.primary)
+        TextButton(onClick = { v = 1f; onSave(1f) }, enabled = v != 1f) { Text("Reset") }
+    }
+    androidx.compose.material3.Slider(
+        value = v, onValueChange = { v = Math.round(it * 20) / 20f },
+        onValueChangeFinished = { onSave(v) },
+        valueRange = 0.8f..1.2f, steps = 7,
+        modifier = Modifier.padding(horizontal = 16.dp).height(32.dp),
+    )
 }
 
 @Composable
@@ -384,7 +402,11 @@ private fun Swatch(
 @Composable
 private fun ShapeSelector(current: IconShape, onPick: (IconShape) -> Unit) {
     val cs = MaterialTheme.colorScheme
-    Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp), horizontalArrangement = Arrangement.SpaceBetween) {
+    Row(
+        Modifier.fillMaxWidth().horizontalScroll(androidx.compose.foundation.rememberScrollState())
+            .padding(horizontal = 16.dp),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
         IconShape.entries.forEach { shape ->
             val on = shape == current
             androidx.compose.foundation.layout.Box(

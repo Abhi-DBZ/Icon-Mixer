@@ -24,6 +24,7 @@ import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -38,6 +39,7 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import com.iconforge.app.export.InstallEvents
+import kotlinx.coroutines.flow.collectLatest
 import com.iconforge.app.ui.AppsScreen
 import com.iconforge.app.ui.EditorScreen
 import com.iconforge.app.ui.ExportScreen
@@ -70,7 +72,11 @@ class MainActivity : ComponentActivity() {
         pendingIntent.value = intent
         setContent {
             IconForgeTheme(app.settings) {
-                Root(pendingIntent.value) { pendingIntent.value = null }
+                val tourDone by app.settings.tourDone.collectAsState()
+                androidx.compose.foundation.layout.Box {
+                    Root(pendingIntent.value) { pendingIntent.value = null }
+                    if (!tourDone) com.iconforge.app.ui.TourScreen { app.settings.setTourDone(true) }
+                }
             }
         }
     }
@@ -113,6 +119,14 @@ private fun Root(launchIntent: Intent?, consumed: () -> Unit) {
         }
     }
     LaunchedEffect(Unit) { InstallEvents.events.collect { snackbar.showSnackbar(it) } }
+    // Icon changed / removed: a short snackbar with Undo (a newer change replaces the old one).
+    LaunchedEffect(Unit) {
+        vm.undoable.collectLatest { text ->
+            snackbar.currentSnackbarData?.dismiss()
+            val r = snackbar.showSnackbar(text, actionLabel = "Undo", duration = androidx.compose.material3.SnackbarDuration.Short)
+            if (r == androidx.compose.material3.SnackbarResult.ActionPerformed) vm.undo()
+        }
+    }
     // Packs or apps may have been installed while we were away.
     var first by remember { mutableStateOf(true) }
     LifecycleResumeEffect(Unit) {

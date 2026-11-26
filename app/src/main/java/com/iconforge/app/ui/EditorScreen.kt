@@ -101,6 +101,7 @@ fun EditorScreen(main: MainViewModel, nav: NavHostController, themeId: Long, ini
     val selecting = sel.isNotEmpty()
     val listView by main.a.settings.editorList.collectAsState()
     val shape = IconShape.of(theme?.iconShape)
+    val fgScale = theme?.iconScale ?: 1f
     var shapeDialog by remember { mutableStateOf(false) }
     var autoFill by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
@@ -173,7 +174,7 @@ fun EditorScreen(main: MainViewModel, nav: NavHostController, themeId: Long, ini
             }
         },
     ) { pad ->
-      CompositionLocalProvider(LocalIconShape provides shape) {
+      CompositionLocalProvider(LocalIconShape provides shape, LocalIconScale provides fgScale) {
         Column(Modifier.fillMaxSize().padding(pad)) {
             SearchField(query, { vm.query.value = it }, "Search apps", Modifier.padding(horizontal = 16.dp, vertical = 4.dp))
             Row(Modifier.horizontalScroll(rememberScrollState()).padding(horizontal = 16.dp, vertical = 6.dp),

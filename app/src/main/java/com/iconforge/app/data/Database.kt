@@ -59,6 +59,8 @@ data class ThemeEntity(
     val exportCount: Int = 0,
     /** IconShape name: how adaptive icons are cut when exported/previewed. */
     val iconShape: String = "DEFAULT",
+    /** Size of the icon inside [iconShape] (1 = as designed); ignored for the launcher default. */
+    val iconScale: Float = 1f,
 )
 
 object Source {
@@ -170,7 +172,7 @@ interface MappingDao {
 
 @Database(
     entities = [InstalledApp::class, IconPackEntity::class, ThemeEntity::class, MappingEntity::class],
-    version = 3,
+    version = 4,
     exportSchema = false,
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -182,8 +184,14 @@ abstract class AppDatabase : RoomDatabase() {
     companion object {
         fun create(context: Context): AppDatabase =
             Room.databaseBuilder(context, AppDatabase::class.java, "iconforge.db")
-                .addMigrations(MIGRATION_1_2, MIGRATION_2_3)
+                .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4)
                 .build()
+
+        private val MIGRATION_3_4 = object : Migration(3, 4) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE themes ADD COLUMN iconScale REAL NOT NULL DEFAULT 1.0")
+            }
+        }
 
         private val MIGRATION_2_3 = object : Migration(2, 3) {
             override fun migrate(db: SupportSQLiteDatabase) {

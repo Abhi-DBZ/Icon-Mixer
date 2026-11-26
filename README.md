@@ -44,10 +44,12 @@ apps" when Android asks). Android 8.0 or newer.
   installed pack (A–Z index with a letter bubble), with a preview next to your other icons. Or keep the original, or use any
   image.
 - **Theme editor**: grid or list view, filters (missing / auto / manual / new / system),
-  multi-select bulk edits, undo, reset an app or the whole theme.
+  multi-select bulk edits, undo (also from the snackbar after a change, or a deleted theme),
+  reset an app or the whole theme. Rendered icons are cached on disk, so big themes open fast.
 - **App colours**: wallpaper colours (Android 12+) or one of 12 colours, each a full Material You palette; pure black dark theme.
-- **Icon shape for adaptive icons**: circle, squircle, rounded square, teardrop or square,
-  even on launchers that can't change icon shape.
+- **Icon shape for adaptive icons**: circle, squircle, rounded square, teardrop, square,
+  hexagon, flower, leaf or pebble, even on launchers that can't change icon shape, with a
+  slider for how big the icon sits inside the shape.
 - **Adjust icons**: size and a coloured background plate, so icons from different packs blend.
 - **Home-screen preview** on your wallpaper colours (or a photo), with missing icons highlighted.
 - **Live Material You colours (experimental)**: icons from packs like Pix Material You keep
