@@ -69,7 +69,12 @@ class LoadedPack(
     val calendars: Map<String, String> = emptyMap(),
     /** Pack-defined groups (drawable.xml <category>), names already de-duplicated. */
     val categories: Map<String, List<String>> = emptyMap(),
+    /** Any drawable name → the one name kept for its picture (packs list one picture under several names). */
+    private val sameAs: Map<String, String> = emptyMap(),
 ) {
+    /** The name [icons] uses for this drawable's picture, so one picture is copied once. */
+    fun canonical(name: String): String = sameAs[name] ?: name
+
     val hasStyle get() = backs.isNotEmpty() || mask != null || upon != null
 
     private val ids = ConcurrentHashMap<String, Int>()
@@ -221,6 +226,7 @@ class IconPacks(private val context: Context) {
             backs = backs.mapNotNull(::ok), mask = ok(mask), upon = ok(upon), scale = scale,
             calendars = calendars.filterValues { pack.drawableId(it + "1") != 0 },
             categories = if (categories.size > 1) categories else emptyMap(),
+            sameAs = canonical.mapNotNull { (n, file) -> keepFor[file]?.takeIf { it != n }?.let { n to it } }.toMap(),
         )
     }
 

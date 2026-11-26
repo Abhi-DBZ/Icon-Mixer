@@ -160,7 +160,15 @@ class PackExporter(
             return n
         }
 
-        fun addIcon(src: IconSrc, base: String): String? {
+        /** Same picture under another name in the pack → one name, so it is copied once. */
+        fun canon(src: IconSrc): IconSrc = when (src) {
+            is IconSrc.Pack -> packs.cached(src.pack)?.let { IconSrc.Pack(src.pack, it.canonical(src.drawable)) } ?: src
+            is IconSrc.Adjusted -> src.copy(base = canon(src.base))
+            else -> src
+        }
+
+        fun addIcon(src0: IconSrc, base: String): String? {
+            val src = canon(src0)
             bySource[src.key]?.let { return it }
             // Draw in light and dark mode; keep the dark picture only when it differs
             // (packs with day/night icons), so the launcher can switch with the phone's theme.
@@ -173,8 +181,8 @@ class PackExporter(
         }
 
         /** Live copy of a pack's XML icon; null = not XML / not copyable (use an image). */
-        fun addLive(m: MappingEntity, base: String): String? {
-            val pack = m.iconPack ?: return null; val drawable = m.iconResource ?: return null
+        fun addLive(pack: String, drawable0: String, base: String): String? {
+            val drawable = packs.cached(pack)?.canonical(drawable0) ?: drawable0
             val k = "$pack:$drawable"
             liveBySource[k]?.let { return it }
             val c = copier(pack) ?: return null
@@ -183,6 +191,9 @@ class PackExporter(
             val ok = c.collect(drawable, name, bundle, shape = ShapePaths.svg(shape.name), shapeAll = settings.shapeAllIcons.value, scale = fg)
             return if (ok) name.also { liveBySource[k] = it } else { names.remove(name); null }
         }
+
+        // Packs parsed up front, so their duplicate names are known (see canon).
+        (maps.mapNotNull { it.iconPack } + listOfNotNull(theme.basePack)).distinct().forEach { packs.load(it) }
 
         maps.forEachIndexed { i, m ->
             if (i % 5 == 0) progress(i.toFloat() / maps.size.coerceAtLeast(1) * 0.85f, "Drawing icons ${i + 1}/${maps.size}")
@@ -196,7 +207,7 @@ class PackExporter(
             }
             // Pack icons only; adjusted ones (size / plate) are pictures.
             val canLive = forApk && live && m.source == Source.PACK && m.scale == 1f && m.bgColor == null
-            val res = (if (canLive) addLive(m, base) else null) ?: addIcon(src, base) ?: return@forEachIndexed
+            val res = (if (canLive) addLive(m.iconPack!!, m.iconResource!!, base) else null) ?: addIcon(src, base) ?: return@forEachIndexed
             if (previews.size < 4) previews += src
             val cls = m.componentKey.substringAfter('/')
             outMaps += PackMapping(m.packageName, cls, res)
@@ -228,10 +239,18 @@ class PackExporter(
             val pack = packs.load(base)
             if (pack != null) {
                 val done = outMaps.map { "${it.packageName}/${it.activityName}" }.toHashSet()
+                // Every app the pack knows gets a mapping, but each picture is copied only once
+                // (the same icon is often listed for several apps or under several names).
                 val entries = pack.byComponent.entries.filter { it.key !in done }
-                entries.forEachIndexed { i, (comp, drawable) ->
-                    if (i % 25 == 0) progress(0.85f * (i.toFloat() / entries.size), "Copying ${pack.label} ${i + 1}/${entries.size}")
-                    val res = addIcon(IconSrc.Pack(base, drawable), ApkBuilder.resName(drawable)) ?: return@forEachIndexed
+                val pictures = entries.map { pack.canonical(it.value) }.distinct().size
+                val copied = HashSet<String>()
+                entries.forEach { (comp, drawable0) ->
+                    val drawable = pack.canonical(drawable0)
+                    if (copied.add(drawable) && copied.size % 25 == 0)
+                        progress(0.85f * (copied.size.toFloat() / pictures), "Copying ${pack.label} ${copied.size}/$pictures")
+                    val name = ApkBuilder.resName(drawable)
+                    val res = (if (forApk && live) addLive(base, drawable, name) else null)
+                        ?: addIcon(IconSrc.Pack(base, drawable), name) ?: return@forEach
                     outMaps += PackMapping(comp.substringBefore('/'), comp.substringAfter('/'), res)
                 }
             }
